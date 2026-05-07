@@ -12,3 +12,5 @@
     - `icons.ts`: project CLI icons (unicode).
     - `log.ts`: all log functions (info, warn, error...).
     - `prompt.ts`: inquire helper for interactive CLI.
+  - `core/`: project internal files.
+    - `schema.ts`: `refinery.toml` file definition.
