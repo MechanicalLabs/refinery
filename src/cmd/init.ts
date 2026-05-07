@@ -1,5 +1,6 @@
 import pc from "picocolors";
-import { ProjectNameInvalidError, ProjectNameRequiredError } from "../error";
+import { ProjectNameInvalidError } from "../errors/project-name-invalid";
+import { ProjectNameRequiredError } from "../errors/project-name-required";
 import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
 import type { Cmd } from ".";

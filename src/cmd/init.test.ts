@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { ProjectNameInvalidError, ProjectNameRequiredError } from "../error";
+import { ProjectNameInvalidError } from "../errors/project-name-invalid";
+import { ProjectNameRequiredError } from "../errors/project-name-required";
 import { validateProjectName } from "./init";
 
 test("validateProjectName returns error for empty name", () => {
