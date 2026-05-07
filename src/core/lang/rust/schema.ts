@@ -17,4 +17,5 @@ export const RustConfigSchema = z
   })
   .strict();
 
+/** @lintignore */
 export type RustConfig = z.infer<typeof RustConfigSchema>;

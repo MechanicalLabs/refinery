@@ -1,4 +1,8 @@
 import pc from "picocolors";
+import { match } from "ripthrow";
+import { loadManifest, saveManifest } from "../core/io/manifest";
+import type { RefineryConfig } from "../core/schema";
+import { IoFileNotFound } from "../errors/io/file-not-found";
 import { ProjectNameInvalidError } from "../errors/project-name-invalid";
 import { ProjectNameRequiredError } from "../errors/project-name-required";
 import { logger } from "../ui/log";
@@ -25,6 +29,25 @@ interface RefineryInitData {
 }
 
 async function runInit(): Promise<void> {
+  const manifestResult = await loadManifest();
+
+  const alreadyExists = match(manifestResult, {
+    ok: () => true,
+    err: (err: Error) => {
+      if (err instanceof IoFileNotFound) {
+        return false;
+      }
+
+      logger.error("Existing manifest is corrupted:", err.message);
+      process.exit(1);
+    },
+  });
+
+  if (alreadyExists) {
+    logger.warn(pc.yellow("A refinery.toml manifest already exists."));
+    process.exit(1);
+  }
+
   const ui = new PromptGroup("Refinery", "Setup");
 
   const project = await ui.run<RefineryInitData>({
@@ -32,16 +55,21 @@ async function runInit(): Promise<void> {
 
     language: () => Promise.resolve("rust"),
     platform: () => Promise.resolve("github"),
-
-    // Uncomment when more options are added
-    /**
-    language: step.select("Project Language", [
-      { value: "rust", label: "Rust", hint: "Setup Refinery for Rust" },
-    ]),
-
-    platform: step.select("CI Platform", [{ value: "github", label: "GitHub Actions" }]),
-     */
   });
+
+  const manifest: RefineryConfig = {
+    version: 1,
+    lang: project.language,
+    platform: project.platform,
+    artifacts: [
+      {
+        type: "bin",
+        name: project.name,
+      },
+    ],
+  };
+
+  await saveManifest(manifest);
 
   PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
 }

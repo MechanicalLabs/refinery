@@ -1,24 +1,37 @@
+import { type AsyncResult, Err, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
+import { IoFileNotFound } from "../../errors/io/file-not-found";
 import { type RefineryConfig, RefineryConfigSchema } from "../schema";
 import { exists, readFile, writeFile } from "./fs";
 
 const FILENAME = "refinery.toml";
 
-export async function loadManifest(): Promise<RefineryConfig> {
+export async function loadManifest(): AsyncResult<RefineryConfig, IoFileNotFound | Error> {
   if (!exists(FILENAME)) {
-    throw new Error(`Configuration file ${FILENAME} not found.`);
+    return Err(new IoFileNotFound());
   }
 
-  const raw = await readFile(FILENAME);
-  const data = parse(raw);
+  const fileResult = await readFile(FILENAME);
 
-  return RefineryConfigSchema.parse(data);
+  if (!fileResult.ok) {
+    return fileResult;
+  }
+
+  return safe(() => {
+    const data = parse(fileResult.value);
+
+    return RefineryConfigSchema.parse(data);
+  });
 }
 
-export async function saveManifest(config: RefineryConfig): Promise<void> {
-  const validated = RefineryConfigSchema.parse(config);
+export async function saveManifest(config: RefineryConfig): AsyncResult<void, Error> {
+  const validation = safe(() => RefineryConfigSchema.parse(config));
 
-  const content = stringify(validated as unknown as Record<string, unknown>);
+  if (!validation.ok) {
+    return validation;
+  }
 
-  await writeFile(FILENAME, content);
+  const content = stringify(validation.value as unknown as Record<string, unknown>);
+
+  return await writeFile(FILENAME, content);
 }

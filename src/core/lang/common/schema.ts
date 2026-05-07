@@ -24,6 +24,7 @@ export const createArtifactSchema = <
   library: L,
 ): z.ZodDiscriminatedUnion<[B, L], "type"> => z.discriminatedUnion("type", [binary, library]);
 
+/** @lintignore */
 export const Artifact = createArtifactSchema(CommonBinaryArtifact, CommonLibraryArtifact);
 
 export type Artifact = z.infer<typeof Artifact>;
