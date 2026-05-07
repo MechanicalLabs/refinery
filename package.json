@@ -1,6 +1,7 @@
 {
   "name": "refinery",
   "module": "src/index.ts",
+  "version": "0.1.0",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -27,6 +28,7 @@
     "build:binary": "bun build ./src/index.ts --compile --outfile dist/refinery"
   },
   "dependencies": {
+    "commander": "^14.0.3",
     "picocolors": "^1.1.1"
   }
 }
