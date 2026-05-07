@@ -24,7 +24,7 @@ export async function loadManifest(): AsyncResult<RefineryConfig, IoFileNotFound
   });
 }
 
-export async function saveManifest(config: RefineryConfig): AsyncResult<void, Error> {
+export async function saveManifest(config: RefineryConfig): AsyncResult<number, Error> {
   const validation = safe(() => RefineryConfigSchema.parse(config));
 
   if (!validation.ok) {
