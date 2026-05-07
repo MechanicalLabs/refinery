@@ -1,35 +1,50 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import type { AsyncResult } from "ripthrow";
+import { Err, Ok, safeAsync } from "ripthrow";
 
-export async function readFile(path: string): Promise<string> {
-  const file = Bun.file(resolve(path));
-  return await file.text();
+export function readFile(path: string): AsyncResult<string, Error> {
+  return safeAsync(Bun.file(resolve(path)).text());
 }
 
-export async function writeFile(path: string, content: string): Promise<void> {
+export async function writeFile(path: string, content: string): AsyncResult<void, Error> {
   const fullPath = resolve(path);
   const dir = dirname(fullPath);
 
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  try {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    await Bun.write(fullPath, content);
+    return Ok(undefined);
+  } catch (e) {
+    return Err(e as Error);
   }
-
-  await Bun.write(fullPath, content);
 }
 
 export function exists(path: string): boolean {
   return existsSync(resolve(path));
 }
 
-export async function readJson<T>(path: string): Promise<T> {
-  const file = Bun.file(resolve(path));
-  return (await file.json()) as T;
+/** @lintignore */
+export function readJson<T>(path: string): AsyncResult<T, Error> {
+  return safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
 }
 
-export async function writeJson(path: string, data: unknown): Promise<void> {
-  await writeFile(path, JSON.stringify(data, null, 2));
+/** @lintignore */
+export function writeJson(path: string, data: unknown): AsyncResult<void, Error> {
+  return safeAsync(
+    (async (): Promise<void> => {
+      const content = JSON.stringify(data, null, 2);
+      const res = await writeFile(path, content);
+      if (!res.ok) {
+        throw res.error;
+      }
+    })(),
+  );
 }
 
+/** @lintignore */
 export function getAbsolutePath(path: string): string {
   return resolve(path);
 }
