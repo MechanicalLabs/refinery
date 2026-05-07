@@ -4,6 +4,8 @@ import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
 import type { Cmd } from ".";
 
+const PROJECT_REGEXP = /[^a-zA-Z0-9-_]/u;
+
 interface RefineryInitData {
   name: string;
   language: "rust";
@@ -17,16 +19,25 @@ async function runInit(): Promise<void> {
     // @ts-expect-error: Not all code paths return a value
     // This is intentional to allow for validation errors to be returned
     name: step.text("Project Name", "refinery-app", (v: string) => {
-      if (!v) {
+      if (!v.trim()) {
         return "Name is required";
+      }
+      if (PROJECT_REGEXP.test(v)) {
+        return "Name can only contain letters, numbers, dashes, and underscores";
       }
     }),
 
-    language: step.select("Language Engine", [
-      { value: "rust", label: "Rust", hint: "Native compilation" },
+    language: () => Promise.resolve("rust"),
+    platform: () => Promise.resolve("github"),
+
+    // Uncomment when more options are added
+    /**
+    language: step.select("Project Language", [
+      { value: "rust", label: "Rust", hint: "Setup Refinery for Rust" },
     ]),
 
     platform: step.select("CI Platform", [{ value: "github", label: "GitHub Actions" }]),
+     */
   });
 
   PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
