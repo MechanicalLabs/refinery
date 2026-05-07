@@ -30,6 +30,8 @@
   "dependencies": {
     "@clack/prompts": "^1.3.0",
     "commander": "^14.0.3",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "smol-toml": "^1.6.1",
+    "zod": "^4.4.3"
   }
 }
