@@ -25,5 +25,8 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "build:binary": "bun build ./src/index.ts --compile --outfile dist/refinery"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1"
   }
 }

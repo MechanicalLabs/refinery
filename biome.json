@@ -23,9 +23,7 @@
       "performance": "error",
       "security": "error",
       "style": "error",
-      "suspicious": {
-        "noConsole": "off"
-      },
+      "suspicious": "error",
       "a11y": "error",
       "nursery": "error"
     }
