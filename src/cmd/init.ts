@@ -1,10 +1,21 @@
 import pc from "picocolors";
-
+import { ProjectNameInvalidError, ProjectNameRequiredError } from "../error";
 import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
 import type { Cmd } from ".";
 
 const PROJECT_REGEXP = /[^a-zA-Z0-9-_]/u;
+
+// @ts-expect-error: Not all code paths return a value
+// This is intentional to allow for validation errors to be returned
+function validateProjectName(v: string): string | undefined {
+  if (!v.trim()) {
+    return new ProjectNameRequiredError().message;
+  }
+  if (PROJECT_REGEXP.test(v)) {
+    return new ProjectNameInvalidError().message;
+  }
+}
 
 interface RefineryInitData {
   name: string;
@@ -16,16 +27,7 @@ async function runInit(): Promise<void> {
   const ui = new PromptGroup("Refinery", "Setup");
 
   const project = await ui.run<RefineryInitData>({
-    // @ts-expect-error: Not all code paths return a value
-    // This is intentional to allow for validation errors to be returned
-    name: step.text("Project Name", "refinery-app", (v: string) => {
-      if (!v.trim()) {
-        return "Name is required";
-      }
-      if (PROJECT_REGEXP.test(v)) {
-        return "Name can only contain letters, numbers, dashes, and underscores";
-      }
-    }),
+    name: step.text("Project Name", "refinery-app", validateProjectName),
 
     language: () => Promise.resolve("rust"),
     platform: () => Promise.resolve("github"),
@@ -53,3 +55,5 @@ export const initCmd: Cmd = {
     });
   },
 };
+
+export { validateProjectName };
