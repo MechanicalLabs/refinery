@@ -6,7 +6,7 @@ import { z } from "zod";
 import { RustConfigSchema } from "./lang/rust/schema";
 
 const baseShape = {
-  version: z.number().describe("The version of the refinery configuration schema."),
+  version: z.literal(1).describe("The version of the refinery configuration schema."),
   platform: z.enum(["github"]),
 };
 
