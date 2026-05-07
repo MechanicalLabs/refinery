@@ -7,12 +7,18 @@ import { Command } from "commander";
 
 import pkg from "../../package.json" with { type: "json" };
 import { printBranding } from "../ui";
-import { logger } from "../ui/log";
+import { initCmd } from "./init";
 
 /**
  * Commander initialization
  */
 const program = new Command();
+
+interface Cmd {
+  name: string;
+  description: string;
+  action: () => void;
+}
 
 /**
  * Define the program's name, description, version, and default action when no command is provided.
@@ -28,14 +34,21 @@ program
   });
 
 /**
- * Example command.
- * TODO: delete this
+ * COMMAND REGISTRY
  */
-program
-  .command("example")
-  .description("Example command")
-  .action(() => {
-    logger.info("This is an example command");
-  });
+const commands: Cmd[] = [initCmd];
 
+/**
+ * Register commands with the commander program.
+ */
+for (const cmd of commands) {
+  program
+    .command(cmd.name)
+    .description(cmd.description)
+    .action(() => {
+      cmd.action();
+    });
+}
+
+export type { Cmd };
 export { program };
