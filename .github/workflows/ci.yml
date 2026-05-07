@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint and Format (Biome)
+        run: bun x @biomejs/biome check .
+
+      - name: Type Check (TSC)
+        run: bun x tsc --noEmit
+
+      - name: Unused dependencies (Knip)
+        run: bun x knip
+
+      - name: Tests
+        run: bun test
