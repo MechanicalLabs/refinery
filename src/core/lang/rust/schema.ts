@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+/**
+ * `refinery.toml` definition for `Rust` language.
+ */
 export const RustConfigSchema = z
   .object({
-    edition: z.string(),
+    exampleProp: z.string(),
   })
   .strict();
 
