@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 
-import pkg from "../../package.json" with { type: "json" };
+import { getMeta } from "../macros.ts" with { type: "macro" };
 import { printBranding } from "../ui";
 import { initCmd } from "./init";
 
@@ -26,7 +26,7 @@ interface Cmd {
 program
   .name("refinery")
   .description("Configuration-driven CI/CD Orchestrator Orchestrator")
-  .version(pkg.version)
+  .version(getMeta().version)
   .action(() => {
     printBranding();
 
