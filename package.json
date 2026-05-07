@@ -28,6 +28,7 @@
     "build:binary": "bun build ./src/index.ts --compile --outfile dist/refinery"
   },
   "dependencies": {
+    "@clack/prompts": "^1.3.0",
     "commander": "^14.0.3",
     "picocolors": "^1.1.1"
   }
