@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import type { AsyncResult } from "ripthrow";
-import { Err, safe, safeAsync } from "ripthrow";
+import { Err, Ok, safe, safeAsync } from "ripthrow";
+import { IoFileNotFound } from "../../errors/io/file-not-found";
 
 export function readFile(path: string): AsyncResult<string, Error> {
   return safeAsync(Bun.file(resolve(path)).text());
@@ -12,8 +13,14 @@ export function writeFile(path: string, content: string): AsyncResult<number, Er
   return safeAsync(Bun.write(fullPath, content));
 }
 
-export function exists(path: string): Promise<boolean> {
-  return Bun.file(resolve(path)).exists();
+export async function exists(path: string): AsyncResult<void, Error> {
+  const fileExists = await Bun.file(resolve(path)).exists();
+
+  if (fileExists) {
+    return Ok();
+  }
+
+  return Err(new IoFileNotFound());
 }
 
 /** @lintignore */

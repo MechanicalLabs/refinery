@@ -1,14 +1,16 @@
-import { type AsyncResult, Err, safe } from "ripthrow";
+import { type AsyncResult, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
-import { IoFileNotFound } from "../../errors/io/file-not-found";
+import type { IoFileNotFound } from "../../errors/io/file-not-found";
 import { type RefineryConfig, RefineryConfigSchema } from "../schema";
 import { exists, readFile, writeFile } from "./fs";
 
 const FILENAME = "refinery.toml";
 
 export async function loadManifest(): AsyncResult<RefineryConfig, IoFileNotFound | Error> {
-  if (!exists(FILENAME)) {
-    return Err(new IoFileNotFound());
+  const fileExists = await exists(FILENAME);
+
+  if (!fileExists.ok) {
+    return fileExists;
   }
 
   const fileResult = await readFile(FILENAME);
