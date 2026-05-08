@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
-import type { AsyncResult } from "ripthrow";
-import { Err, Ok, safe, safeAsync } from "ripthrow";
-import { IoFileNotFound } from "../../errors/io/file-not-found";
+import { type AsyncResult, AsyncResultBuilder, Err, Ok, safe, safeAsync } from "ripthrow";
+import { Errors } from "../../errors";
 
 export function readFile(path: string): AsyncResult<string, Error> {
   return safeAsync(Bun.file(resolve(path)).text());
@@ -20,12 +19,12 @@ export async function exists(path: string): AsyncResult<void, Error> {
     return Ok();
   }
 
-  return Err(new IoFileNotFound());
+  return Err(Errors.ioFileNotFound());
 }
 
 /** @lintignore */
-export function readJson<T>(path: string): AsyncResult<T, Error> {
-  return safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
+export function readJson<T>(path: string): AsyncResultBuilder<T, Error> {
+  return AsyncResultBuilder.safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
 }
 
 /** @lintignore */
