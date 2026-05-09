@@ -6,7 +6,10 @@ export const Errors = createErrors({
   projectNameInvalid: {
     message: () => "Name can only contain letters, numbers, dashes, and underscores",
   },
-  manifestAlreadyExists: { message: () => "A refinery.toml already exists" },
+  manifestAlreadyExists: {
+    message: () => "A refinery.toml already exists",
+    help: () => "Use --force to overwrite the existing file",
+  },
 });
 
 export type AppError = typeof Errors._type;

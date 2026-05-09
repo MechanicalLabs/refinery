@@ -1,4 +1,4 @@
-import { type AsyncResult, safe } from "ripthrow";
+import { type AsyncResult, context, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
 import type { AppError } from "../../errors";
 import { type RefineryConfig, RefineryConfigSchema } from "../schema";
@@ -16,7 +16,7 @@ export async function loadManifest(): AsyncResult<RefineryConfig, AppError | Err
   const fileResult = await readFile(FILENAME);
 
   if (!fileResult.ok) {
-    return fileResult;
+    return context(fileResult, "Failed to read refinery.toml");
   }
 
   return safe(() => {
@@ -35,5 +35,15 @@ export async function saveManifest(config: RefineryConfig): AsyncResult<number, 
 
   const content = stringify(validation.value as unknown as Record<string, unknown>);
 
-  return await writeFile(FILENAME, content);
+  const writeResult = await writeFile(FILENAME, content);
+
+  if (!writeResult.ok) {
+    return context(
+      writeResult,
+      "Failed to write refinery.toml",
+      "Make sure the current directory is writable",
+    );
+  }
+
+  return writeResult;
 }

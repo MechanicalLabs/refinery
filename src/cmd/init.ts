@@ -19,19 +19,22 @@ function validateProjectName(v: string): string | undefined {
   }
 }
 
-async function runInit(): AsyncResult<void, AppError | Error> {
+async function runInit(force = false): AsyncResult<void, AppError | Error> {
   const manifestResult = await loadManifest();
 
-  if (manifestResult.ok) {
-    logger.warn(pc.yellow("A refinery.toml manifest already exists."));
-    return Ok(undefined);
+  if (manifestResult.ok && !force) {
+    return Err(Errors.manifestAlreadyExists());
+  }
+
+  if (manifestResult.ok && force) {
+    logger.warn(pc.yellow("Overwriting existing refinery.toml..."));
   }
 
   const isFileNotFound = matchErr(manifestResult)
     .on(Errors.ioFileNotFound, () => true)
     .otherwise(() => false);
 
-  if (!isFileNotFound) {
+  if (!(manifestResult.ok || isFileNotFound)) {
     return Err(manifestResult.error);
   }
 
@@ -60,10 +63,14 @@ async function runInit(): AsyncResult<void, AppError | Error> {
 export const initCmd: Cmd = {
   name: "init",
   description: "Initialize project",
-  action: (): void => {
-    runInit().then((result) => {
+  options: [{ flags: "-f, --force", description: "Overwrite existing refinery.toml" }],
+  action: (options: Record<string, unknown>): void => {
+    // biome-ignore lint/complexity/useLiteralKeys: TypeScript noPropertyAccessFromIndexSignature requires bracket notation
+    const force = Boolean(options["force"]);
+
+    runInit(force).then((result) => {
       if (!result.ok) {
-        logger.error(result.error.message);
+        logger.fail(result.error);
         process.exit(1);
       }
     });

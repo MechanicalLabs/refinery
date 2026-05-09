@@ -14,10 +14,16 @@ import { initCmd } from "./init";
  */
 const program = new Command();
 
+interface CmdOption {
+  flags: string;
+  description: string;
+}
+
 interface Cmd {
   name: string;
   description: string;
-  action: () => void;
+  options?: CmdOption[];
+  action: (options: Record<string, unknown>) => void;
 }
 
 /**
@@ -42,12 +48,17 @@ const commands: Cmd[] = [initCmd];
  * Register commands with the commander program.
  */
 for (const cmd of commands) {
-  program
-    .command(cmd.name)
-    .description(cmd.description)
-    .action(() => {
-      cmd.action();
-    });
+  const sub = program.command(cmd.name).description(cmd.description);
+
+  if (cmd.options) {
+    for (const opt of cmd.options) {
+      sub.option(opt.flags, opt.description);
+    }
+  }
+
+  sub.action((options) => {
+    cmd.action(options ?? {});
+  });
 }
 
 export type { Cmd };
