@@ -1,12 +1,8 @@
 import { z } from "zod";
+import { createArtifactUnionHelper } from "../../../utils/create-artifact-union-helper";
+import { CommonBinaryArtifact, CommonLibraryArtifact, Target } from "../common/schema";
 
-import {
-  CommonBinaryArtifact,
-  CommonLibraryArtifact,
-  createArtifactSchema,
-} from "../common/schema";
-
-const Artifact = createArtifactSchema(CommonBinaryArtifact, CommonLibraryArtifact);
+const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLibraryArtifact);
 
 /**
  * `refinery.toml` definition for `Rust` language.
@@ -14,6 +10,7 @@ const Artifact = createArtifactSchema(CommonBinaryArtifact, CommonLibraryArtifac
 export const RustConfigSchema = z
   .object({
     artifacts: z.array(Artifact).optional().default([]),
+    targets: z.array(Target).optional().default([]),
   })
   .strict();
 

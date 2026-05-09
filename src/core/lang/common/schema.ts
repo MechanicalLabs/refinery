@@ -1,10 +1,21 @@
 import { z } from "zod";
+import { createArtifactUnionHelper } from "../../../utils/create-artifact-union-helper";
 import { enumFromObject } from "../../../utils/enum-from-object";
 import { Abi } from "../../types/abi";
 import { Arch } from "../../types/arch";
 import { Os } from "../../types/os";
 import { Package } from "../../types/packages";
+import { validateBinaryTarget } from "./vaildations";
 
+/**
+ * ##############
+ * #  ARTIFACT  #
+ * ##############
+ */
+
+/**
+ * --- BINARY ---
+ */
 export const CommonBinaryArtifact = z
   .object({
     type: z.literal("bin"),
@@ -13,6 +24,9 @@ export const CommonBinaryArtifact = z
   })
   .strict();
 
+/**
+ * --- LIBRARY ---
+ */
 export const CommonLibraryArtifact = z
   .object({
     type: z.literal("lib"),
@@ -21,20 +35,28 @@ export const CommonLibraryArtifact = z
   })
   .strict();
 
-export const createArtifactSchema = <
-  B extends z.ZodObject<z.ZodRawShape & { type: z.ZodLiteral<"bin"> }>,
-  L extends z.ZodObject<z.ZodRawShape & { type: z.ZodLiteral<"lib"> }>,
->(
-  binary: B,
-  library: L,
-): z.ZodDiscriminatedUnion<[B, L], "type"> => z.discriminatedUnion("type", [binary, library]);
-
-// export const Artifact = createArtifactSchema(CommonBinaryArtifact, CommonLibraryArtifact);
+/**
+ * --- ARTIFACT TYPES (z.infer) ---
+ */
+/** @lintignore */
+export const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLibraryArtifact);
+/** @lintignore */
 export type CommonBinaryArtifact = z.infer<typeof CommonBinaryArtifact>;
-// export type CommonBinaryLibrary = z.infer<typeof CommonLibraryArtifact>;
+/** @lintignore */
+export type CommonBinaryLibrary = z.infer<typeof CommonLibraryArtifact>;
 
 // export type Artifact = z.infer<typeof Artifact>;
 
+/**
+ * ##############
+ * #   TARGET   #
+ * ##############
+ */
+
+/**
+ * --- BINARY ---
+ */
+/* @lintignore */
 export const CommonBinaryTarget = z
   .object({
     type: z.literal("bin"),
@@ -45,7 +67,7 @@ export const CommonBinaryTarget = z
       .refine((items) => new Set(items).size === items.length, {
         message: "Architectures must be unique",
       }),
-    abi: enumFromObject(Abi).optional(),
+    abi: enumFromObject(Abi),
     packages: z
       .array(enumFromObject(Package))
       .min(1)
@@ -63,79 +85,47 @@ export const CommonBinaryTarget = z
       .optional(),
   })
   .strict()
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: High complexity is inherent to the strict target platform validation rules.
-  .superRefine((data, ctx) => {
-    if (data.os === Os.macos && data.abi) {
-      ctx.addIssue({
-        code: "custom",
-        message: "MacOS does not support ABIs",
-        path: ["abi"],
-      });
-    }
+  .superRefine(validateBinaryTarget);
 
-    if (data.os === Os.linux && data.abi) {
-      const allowed: (typeof Abi)[keyof typeof Abi][] = [Abi.gnu, Abi.musl];
-      if (!allowed.includes(data.abi)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Linux only supports 'gnu' or 'musl'",
-          path: ["abi"],
-        });
-      }
-    }
-
-    if (data.os === Os.windows && data.abi) {
-      const allowed: (typeof Abi)[keyof typeof Abi][] = [Abi.gnu, Abi.msvc];
-      if (!allowed.includes(data.abi)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Windows only supports 'msvc' or 'gnu'",
-          path: ["abi"],
-        });
-      }
-    }
-
-    if (data.packages) {
-      if (
-        data.os !== Os.linux &&
-        (data.packages.includes(Package.deb) || data.packages.includes(Package.rpm))
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Linux-specific packages (deb/rpm) are not allowed for other OS",
-          path: ["packages"],
-        });
-      }
-
-      if (data.os !== Os.windows && data.packages.includes(Package.msi)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "MSI packages are only allowed for Windows",
-          path: ["packages"],
-        });
-      }
-    }
+/**
+ * --- LIBRARY ---
+ */
+/* @lintignore */
+export const CommonLibraryTarget = z
+  .object({
+    type: z.literal("lib"),
+    os: enumFromObject(Os),
+    arch: z
+      .array(enumFromObject(Arch))
+      .min(1)
+      .refine((items) => new Set(items).size === items.length, {
+        message: "Architectures must be unique",
+      }),
+    abi: enumFromObject(Abi),
+    packages: z
+      .array(enumFromObject(Package))
+      .min(1)
+      .refine((items) => new Set(items).size === items.length, {
+        message: "Packages must be unique",
+      })
+      .optional(),
+    headers: z.boolean().optional().default(false),
+    includeInPackage: z
+      .array(z.string())
+      .min(1)
+      .refine((items) => new Set(items).size === items.length, {
+        message: "File to include in package must be unique",
+      })
+      .optional(),
   })
-  .transform((data) => {
-    if (data.abi) {
-      return data;
-    }
+  .strict()
+  .superRefine(validateBinaryTarget);
 
-    if (data.os === Os.linux) {
-      return {
-        ...data,
-        abi: Abi.gnu,
-      };
-    }
-
-    if (data.os === Os.windows) {
-      return {
-        ...data,
-        abi: Abi.msvc,
-      };
-    }
-
-    return data;
-  });
-
-export type CommonBinaryTarget = z.infer<typeof CommonBinaryTarget>;
+/**
+ * --- TARGET TYPES (z.infer) ---
+ */
+export const Target = createArtifactUnionHelper(CommonBinaryTarget, CommonLibraryTarget);
+/** @lintignore */
+export type CommonTargetArtifact = z.infer<typeof CommonBinaryArtifact>;
+/** @lintignore */
+export type CommonTargetLibrary = z.infer<typeof CommonLibraryArtifact>;
