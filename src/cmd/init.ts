@@ -2,13 +2,8 @@ import pc from "picocolors";
 import { type AsyncResult, buildAsync, Err, matchErr, Ok, type Result } from "ripthrow";
 import { loadManifest, saveManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
-import {
-  getLanguageStrategy,
-  getPlatformStrategy,
-  LanguageRegistry,
-  PlatformRegistry,
-} from "../core/strategy/registry";
-import type { LanguageStrategy, PlatformStrategy } from "../core/strategy/types";
+import { LanguageRegistry, PlatformRegistry } from "../core/strategy/registry";
+import type { LanguageStrategy, PlatformStrategy, StrategyContext } from "../core/strategy/types";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
@@ -54,13 +49,49 @@ async function promptProject(): Promise<{ name: string; language: string; platfo
     name: step.text("Project Name", "refinery-app", validateProjectName),
     language: step.select(
       "Select Language",
-      LanguageRegistry.map((l) => ({ value: l.id, label: l.name })),
+      LanguageRegistry.all().map((l) => ({ value: l.id, label: l.name })),
     ),
     platform: step.select(
       "Select Platform",
-      PlatformRegistry.map((p) => ({ value: p.id, label: p.name })),
+      PlatformRegistry.all().map((p) => ({ value: p.id, label: p.name })),
     ),
   });
+}
+
+async function runStrategies(
+  project: { name: string },
+  langStrategy: LanguageStrategy,
+  platformStrategy: PlatformStrategy,
+  manifest: RefineryConfig,
+): AsyncResult<void, Error> {
+  const { task } = PromptGroup.spinner();
+
+  const context: StrategyContext = {
+    projectName: project.name,
+    config: manifest,
+    cwd: process.cwd(),
+  };
+
+  let initResult: Result<void, Error> = Ok();
+
+  await task("Initializing project...", async () => {
+    const langInit = await langStrategy.onInit(context);
+    if (!langInit.ok) {
+      initResult = langInit;
+      return;
+    }
+
+    const platInit = await platformStrategy.onInit(context);
+    if (!platInit.ok) {
+      initResult = platInit;
+    }
+  });
+
+  if (!initResult.ok) {
+    return Err(Errors.strategyInitFailed({ strategy: "project" }));
+  }
+
+  return Ok();
 }
 
 function executeInit(project: {
@@ -68,10 +99,10 @@ function executeInit(project: {
   language: string;
   platform: string;
 }): AsyncResult<void, Error> {
-  return buildAsync(Promise.resolve(getLanguageStrategy(project.language)))
+  return buildAsync(Promise.resolve(LanguageRegistry.get(project.language)))
     .andThen(
       (langStrategy: LanguageStrategy) =>
-        buildAsync(Promise.resolve(getPlatformStrategy(project.platform))).map(
+        buildAsync(Promise.resolve(PlatformRegistry.get(project.platform))).map(
           (platformStrategy: PlatformStrategy) => ({
             langStrategy,
             platformStrategy,
@@ -93,35 +124,15 @@ function executeInit(project: {
       if (!result.ok) {
         return result;
       }
-      return Ok({ langStrategy, platformStrategy });
+      return Ok({ langStrategy, platformStrategy, manifest });
     })
-    .andThen(async (deps) => {
-      const { langStrategy, platformStrategy } = deps as {
+    .andThen((deps) => {
+      const { langStrategy, platformStrategy, manifest } = deps as {
         langStrategy: LanguageStrategy;
         platformStrategy: PlatformStrategy;
+        manifest: RefineryConfig;
       };
-      const { task } = PromptGroup.spinner();
-
-      let initResult: Result<void, Error> = Ok();
-
-      await task("Initializing project...", async () => {
-        const langInit = await langStrategy.onInit(project.name);
-        if (!langInit.ok) {
-          initResult = langInit;
-          return;
-        }
-
-        const platInit = await platformStrategy.onInit(project.name);
-        if (!platInit.ok) {
-          initResult = platInit;
-        }
-      });
-
-      if (!initResult.ok) {
-        return Err(Errors.strategyInitFailed({ strategy: "project" }));
-      }
-
-      return Ok();
+      return runStrategies(project, langStrategy, platformStrategy, manifest);
     })
     .tap(() => {
       PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
