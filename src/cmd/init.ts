@@ -1,64 +1,125 @@
 import pc from "picocolors";
-import { type AsyncResult, Err, matchErr, Ok } from "ripthrow";
+import { type AsyncResult, AsyncResultBuilder, buildAsync, Err, matchErr, Ok } from "ripthrow";
 import { loadManifest, saveManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
-import { type AppError, Errors } from "../errors";
+import {
+  getLanguageStrategy,
+  getPlatformStrategy,
+  LanguageRegistry,
+  PlatformRegistry,
+} from "../core/strategy/registry";
+import type { LanguageStrategy, PlatformStrategy } from "../core/strategy/types";
+import { Errors } from "../errors";
+import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
 import type { Cmd } from ".";
 
 const PROJECT_REGEXP = /[^a-zA-Z0-9-_]/u;
 
-// @ts-expect-error: Not all code paths return a value
 function validateProjectName(v: string): string | undefined {
+  let error: string | undefined;
+
   if (!v.trim()) {
-    return Errors.projectNameRequired().message;
+    error = Errors.projectNameRequired().message;
+  } else if (PROJECT_REGEXP.test(v)) {
+    error = Errors.projectNameInvalid().message;
   }
-  if (PROJECT_REGEXP.test(v)) {
-    return Errors.projectNameInvalid().message;
-  }
+
+  return error;
 }
 
-async function runInit(force = false): AsyncResult<void, AppError | Error> {
+async function checkManifest(force: boolean): AsyncResult<boolean, Error> {
   const manifestResult = await loadManifest();
 
-  if (manifestResult.ok && !force) {
+  if (manifestResult.ok) {
+    if (force) {
+      logger.warn(pc.yellow("Overwriting existing refinery.toml..."));
+      return Ok(true);
+    }
     return Err(Errors.manifestAlreadyExists());
   }
 
-  if (manifestResult.ok && force) {
-    logger.warn(pc.yellow("Overwriting existing refinery.toml..."));
-  }
+  const result = matchErr(manifestResult)
+    .on(Errors.ioFileNotFound, () => Ok(true))
+    .otherwise((err) => Err(err));
 
-  const isFileNotFound = matchErr(manifestResult)
-    .on(Errors.ioFileNotFound, () => true)
-    .otherwise(() => false);
+  return result as AsyncResult<boolean, Error>;
+}
 
-  if (!(manifestResult.ok || isFileNotFound)) {
-    return Err(manifestResult.error);
-  }
-
+async function promptProject(): Promise<{ name: string; language: string; platform: string }> {
   const ui = new PromptGroup("Refinery", "Setup");
 
-  const project = await ui.run({
+  return await ui.run({
     name: step.text("Project Name", "refinery-app", validateProjectName),
-    language: () => Promise.resolve("rust" as const),
-    platform: () => Promise.resolve("github" as const),
+    language: step.select(
+      "Select Language",
+      LanguageRegistry.map((l) => ({ value: l.id, label: l.name })),
+    ),
+    platform: step.select(
+      "Select Platform",
+      PlatformRegistry.map((p) => ({ value: p.id, label: p.name })),
+    ),
   });
+}
 
-  const manifest: RefineryConfig = {
-    version: 1,
-    lang: project.language,
-    platform: project.platform,
-    artifacts: [{ type: "bin", name: project.name }],
-    targets: [],
-  };
+async function runInit(force = false): AsyncResult<void, Error> {
+  const canContinue = await checkManifest(force);
+  if (!canContinue.ok) {
+    return canContinue;
+  }
 
-  await saveManifest(manifest);
+  const project = await promptProject();
 
-  PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
+  return buildAsync(Promise.resolve(getLanguageStrategy(project.language)))
+    .andThen(
+      (langStrategy: LanguageStrategy) =>
+        buildAsync(Promise.resolve(getPlatformStrategy(project.platform))).map(
+          (platformStrategy: PlatformStrategy) => ({
+            langStrategy,
+            platformStrategy,
+          }),
+        ).result,
+    )
+    .andThen(async (deps) => {
+      const { langStrategy, platformStrategy } = deps as {
+        langStrategy: LanguageStrategy;
+        platformStrategy: PlatformStrategy;
+      };
+      const manifest: RefineryConfig = {
+        version: 1,
+        platform: project.platform as "github",
+        ...langStrategy.getInitialConfig(project.name),
+      } as RefineryConfig;
 
-  return Ok(undefined);
+      const result = await saveManifest(manifest);
+      if (!result.ok) {
+        return result;
+      }
+      return Ok({ langStrategy, platformStrategy });
+    })
+    .andThen((deps) => {
+      const { langStrategy, platformStrategy } = deps as {
+        langStrategy: LanguageStrategy;
+        platformStrategy: PlatformStrategy;
+      };
+      const { task } = PromptGroup.spinner();
+
+      return AsyncResultBuilder.safeAsync(
+        task("Initializing project...", async () => {
+          await langStrategy.onInit(project.name);
+          await platformStrategy.onInit(project.name);
+        }),
+      ).mapErr((err) => {
+        if (err instanceof Error) {
+          return err;
+        }
+        return new Error(String(err));
+      }).result;
+    })
+    .tap(() => {
+      PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
+    }).result;
 }
 
 export const initCmd: Cmd = {
@@ -66,6 +127,7 @@ export const initCmd: Cmd = {
   description: "Initialize project",
   options: [{ flags: "-f, --force", description: "Overwrite existing refinery.toml" }],
   action: (options: Record<string, unknown>): void => {
+    printBranding();
     // biome-ignore lint/complexity/useLiteralKeys: TypeScript noPropertyAccessFromIndexSignature requires bracket notation
     const force = Boolean(options["force"]);
 
