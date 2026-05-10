@@ -1,5 +1,5 @@
 import pc from "picocolors";
-import { type AsyncResult, AsyncResultBuilder, buildAsync, Err, matchErr, Ok } from "ripthrow";
+import { type AsyncResult, buildAsync, Err, matchErr, Ok, type Result } from "ripthrow";
 import { loadManifest, saveManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
 import {
@@ -63,14 +63,11 @@ async function promptProject(): Promise<{ name: string; language: string; platfo
   });
 }
 
-async function runInit(force = false): AsyncResult<void, Error> {
-  const canContinue = await checkManifest(force);
-  if (!canContinue.ok) {
-    return canContinue;
-  }
-
-  const project = await promptProject();
-
+function executeInit(project: {
+  name: string;
+  language: string;
+  platform: string;
+}): AsyncResult<void, Error> {
   return buildAsync(Promise.resolve(getLanguageStrategy(project.language)))
     .andThen(
       (langStrategy: LanguageStrategy) =>
@@ -98,28 +95,49 @@ async function runInit(force = false): AsyncResult<void, Error> {
       }
       return Ok({ langStrategy, platformStrategy });
     })
-    .andThen((deps) => {
+    .andThen(async (deps) => {
       const { langStrategy, platformStrategy } = deps as {
         langStrategy: LanguageStrategy;
         platformStrategy: PlatformStrategy;
       };
       const { task } = PromptGroup.spinner();
 
-      return AsyncResultBuilder.safeAsync(
-        task("Initializing project...", async () => {
-          await langStrategy.onInit(project.name);
-          await platformStrategy.onInit(project.name);
-        }),
-      ).mapErr((err) => {
-        if (err instanceof Error) {
-          return err;
+      let initResult: Result<void, Error> = Ok();
+
+      await task("Initializing project...", async () => {
+        const langInit = await langStrategy.onInit(project.name);
+        if (!langInit.ok) {
+          initResult = langInit;
+          return;
         }
-        return new Error(String(err));
-      }).result;
+
+        const platInit = await platformStrategy.onInit(project.name);
+        if (!platInit.ok) {
+          initResult = platInit;
+        }
+      });
+
+      if (!initResult.ok) {
+        return Err(Errors.strategyInitFailed({ strategy: "project" }));
+      }
+
+      return Ok();
     })
     .tap(() => {
       PromptGroup.outro(`Project ${pc.red(project.name)} initialized.`);
-    }).result;
+    })
+    .andThen(() => Ok()).result;
+}
+
+async function runInit(force = false): AsyncResult<void, Error> {
+  const canContinue = await checkManifest(force);
+  if (!canContinue.ok) {
+    return canContinue;
+  }
+
+  const project = await promptProject();
+
+  return executeInit(project);
 }
 
 export const initCmd: Cmd = {

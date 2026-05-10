@@ -1,3 +1,4 @@
+import { type AsyncResult, Ok } from "ripthrow";
 import type { LanguageStrategy } from "../../strategy/types";
 
 export const rustStrategy: LanguageStrategy = {
@@ -8,9 +9,9 @@ export const rustStrategy: LanguageStrategy = {
     artifacts: [{ type: "bin", name: projectName }],
     targets: [],
   }),
-  onInit: (_projectName: string): Promise<void> => {
+  onInit: (_projectName: string): AsyncResult<void, Error> => {
     // Rust-specific initialization logic (e.g., creating Cargo.toml if needed)
     // For now, it doesn't do anything extra beyond the manifest.
-    return Promise.resolve();
+    return Promise.resolve(Ok());
   },
 };

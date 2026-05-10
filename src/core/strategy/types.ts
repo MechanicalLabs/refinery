@@ -1,3 +1,4 @@
+import type { AsyncResult } from "ripthrow";
 import type { RefineryConfig } from "../schema";
 
 export interface LanguageStrategy {
@@ -10,7 +11,7 @@ export interface LanguageStrategy {
   /**
    * Performs side effects during initialization (e.g., creating files).
    */
-  onInit: (projectName: string) => Promise<void>;
+  onInit: (projectName: string) => AsyncResult<void, Error>;
 }
 
 export interface PlatformStrategy {
@@ -19,5 +20,5 @@ export interface PlatformStrategy {
   /**
    * Performs side effects during initialization (e.g., creating CI/CD files).
    */
-  onInit: (projectName: string) => Promise<void>;
+  onInit: (projectName: string) => AsyncResult<void, Error>;
 }
