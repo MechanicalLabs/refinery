@@ -10,6 +10,12 @@ export const Errors = createErrors({
     message: () => "A refinery.toml already exists",
     help: () => "Use --force to overwrite the existing file",
   },
+  invalidStrategy: {
+    message: (args: { strategy: string }) => `Invalid strategy: ${args.strategy}`,
+  },
+  strategyInitFailed: {
+    message: (args: { strategy: string }) => `Failed to initialize ${args.strategy} strategy`,
+  },
 });
 
 export type AppError = typeof Errors._type;
