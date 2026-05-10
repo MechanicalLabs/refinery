@@ -8,7 +8,7 @@ import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
-import type { Cmd } from ".";
+import type { Cmd } from "./types";
 
 const PROJECT_REGEXP = /[^a-zA-Z0-9-_]/u;
 
@@ -152,7 +152,7 @@ async function runInit(force = false): AsyncResult<void, Error> {
 }
 
 export const initCmd: Cmd = {
-  name: "init",
+  id: "init",
   description: "Initialize project",
   options: [{ flags: "-f, --force", description: "Overwrite existing refinery.toml" }],
   action: (options: Record<string, unknown>): void => {

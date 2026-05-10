@@ -1,54 +1,35 @@
 /**
  * The entry point for the CLI application.
- * This file sets up the command-line interface using the `commander` library and defines the available commands and their actions.
+ * This file sets up the command-line interface using the `commander` library.
  */
 
 import { Command } from "commander";
-
 import { getMeta } from "../macros.ts" with { type: "macro" };
 import { printBranding } from "../ui";
-import { initCmd } from "./init";
+import { CommandRegistry } from "./registry";
 
 /**
  * Commander initialization
  */
 const program = new Command();
 
-interface CmdOption {
-  flags: string;
-  description: string;
-}
-
-interface Cmd {
-  name: string;
-  description: string;
-  options?: CmdOption[];
-  action: (options: Record<string, unknown>) => void;
-}
-
 /**
  * Define the program's name, description, version, and default action when no command is provided.
  */
 program
   .name("refinery")
-  .description("Configuration-driven CI/CD Orchestrator Orchestrator")
+  .description("Configuration-driven CI/CD Orchestrator")
   .version(getMeta().version)
   .action(() => {
     printBranding();
-
     program.help();
   });
 
 /**
- * COMMAND REGISTRY
+ * Register commands from the CommandRegistry.
  */
-const commands: Cmd[] = [initCmd];
-
-/**
- * Register commands with the commander program.
- */
-for (const cmd of commands) {
-  const sub = program.command(cmd.name).description(cmd.description);
+for (const cmd of CommandRegistry.all()) {
+  const sub = program.command(cmd.id).description(cmd.description);
 
   if (cmd.options) {
     for (const opt of cmd.options) {
@@ -61,5 +42,4 @@ for (const cmd of commands) {
   });
 }
 
-export type { Cmd };
 export { program };
