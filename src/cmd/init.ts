@@ -1,5 +1,6 @@
 import pc from "picocolors";
 import { type AsyncResult, buildAsync, Err, matchErr, Ok, type Result } from "ripthrow";
+import { exists, readFile, writeFile } from "../core/io/fs";
 import { loadManifest, saveManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
 import { LanguageRegistry, PlatformRegistry } from "../core/strategy/registry";
@@ -8,6 +9,7 @@ import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import { PromptGroup, step } from "../ui/prompt";
+import { sh } from "../utils/shell";
 import type { Cmd } from "./types";
 
 // --- TYPES & CONSTANTS ---
@@ -120,6 +122,10 @@ async function runStrategyHooks(ctx: InitContext): AsyncResult<InitContext, Erro
     projectName: ctx.answers.name,
     config: ctx.manifest as RefineryConfig,
     cwd: process.cwd(),
+    sys: {
+      sh,
+      fs: { exists, readFile, writeFile },
+    },
   };
 
   let initResult: Result<void, Error> = Ok();

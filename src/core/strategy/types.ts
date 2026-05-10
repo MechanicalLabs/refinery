@@ -5,6 +5,17 @@ export interface StrategyContext {
   projectName: string;
   config: RefineryConfig;
   cwd: string;
+  sys: {
+    sh: (
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ) => AsyncResult<{ stdout: string; stderr: string; exitCode: number }, Error>;
+    fs: {
+      exists: (path: string) => AsyncResult<void, Error>;
+      readFile: (path: string) => AsyncResult<string, Error>;
+      writeFile: (path: string, content: string) => AsyncResult<number, Error>;
+    };
+  };
 }
 
 export interface LanguageStrategy {
