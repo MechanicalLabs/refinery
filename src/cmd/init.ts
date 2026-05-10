@@ -51,6 +51,7 @@ async function runInit(force = false): AsyncResult<void, AppError | Error> {
     lang: project.language,
     platform: project.platform,
     artifacts: [{ type: "bin", name: project.name }],
+    targets: [],
   };
 
   await saveManifest(manifest);
