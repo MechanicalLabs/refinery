@@ -4,7 +4,7 @@ export const Errors = createErrors({
   ioFileNotFound: { message: () => "File not found" },
   projectNameRequired: { message: () => "Name is required" },
   projectNameInvalid: {
-    message: () => "Name can only contain letters, numbers, dashes, and underscores",
+    message: () => "Name can only contain lowercase letters, numbers, and hyphens",
   },
   manifestAlreadyExists: {
     message: () => "A refinery.toml already exists",
