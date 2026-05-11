@@ -2,7 +2,8 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: it's a test */
 import { describe, expect, test } from "bun:test";
 import { RustConfigSchema } from "../rust/schema";
-import { CommonBinaryArtifact, CommonBinaryTarget } from "./schema";
+import { CommonBinaryArtifact } from "./schema/artifact";
+import { CommonBinaryTarget } from "./schema/target";
 
 describe("Common Schema", () => {
   test("CommonBinaryArtifact should require name", () => {

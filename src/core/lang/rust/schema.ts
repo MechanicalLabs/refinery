@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createArtifactUnionHelper } from "../../../utils/create-artifact-union-helper";
-import { CommonBinaryArtifact, CommonLibraryArtifact, Target } from "../common/schema";
+import { CommonBinaryArtifact, CommonLibraryArtifact } from "../common/schema/artifact";
+import { Target } from "../common/schema/index";
 import { validateConfigReferences } from "../common/vaildations";
 
 const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLibraryArtifact);
@@ -16,5 +17,4 @@ export const RustConfigSchema = z
   .strict()
   .superRefine(validateConfigReferences);
 
-/** @lintignore */
-export type RustConfig = z.infer<typeof RustConfigSchema>;
+// export type RustConfig = z.infer<typeof RustConfigSchema>;

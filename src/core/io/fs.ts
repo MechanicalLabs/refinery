@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { type AsyncResult, AsyncResultBuilder, Err, Ok, safe, safeAsync } from "ripthrow";
+import { type AsyncResult, Err, Ok, safeAsync } from "ripthrow";
 import { Errors } from "../../errors";
 
 export function readFile(path: string): AsyncResult<string, Error> {
@@ -22,23 +22,20 @@ export async function exists(path: string): AsyncResult<void, Error> {
   return Err(Errors.ioFileNotFound());
 }
 
-/** @lintignore */
-export function readJson<T>(path: string): AsyncResultBuilder<T, Error> {
-  return AsyncResultBuilder.safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
-}
+// export function readJson<T>(path: string): AsyncResultBuilder<T, Error> {
+//   return AsyncResultBuilder.safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
+// }
 
-/** @lintignore */
-export async function writeJson(path: string, data: unknown): AsyncResult<number, Error> {
-  const contentResult = safe(() => JSON.stringify(data, null, 2));
+// export async function writeJson(path: string, data: unknown): AsyncResult<number, Error> {
+//   const contentResult = safe(() => JSON.stringify(data, null, 2));
 
-  if (!contentResult.ok) {
-    return Err(contentResult.error as Error);
-  }
+//   if (!contentResult.ok) {
+//     return Err(contentResult.error as Error);
+//   }
 
-  return await writeFile(path, contentResult.value);
-}
+//   return await writeFile(path, contentResult.value);
+// }
 
-/** @lintignore */
-export function getAbsolutePath(path: string): string {
-  return resolve(path);
-}
+// export function getAbsolutePath(path: string): string {
+//   return resolve(path);
+// }
