@@ -14,4 +14,6 @@ bun x knip
 
 bun test
 
+swt --quiet
+
 git add $STAGED_FILES
