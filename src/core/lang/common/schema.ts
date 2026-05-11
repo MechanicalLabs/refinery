@@ -1,3 +1,5 @@
+/** @swt-disable max-repetition */
+
 import { z } from "zod";
 import { createArtifactUnionHelper } from "../../../utils/create-artifact-union-helper";
 import { enumFromObject } from "../../../utils/enum-from-object";

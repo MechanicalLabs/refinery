@@ -1,3 +1,4 @@
+/** @swt-disable max-repetition */
 import type { z } from "zod";
 import { Abi } from "../../types/abi";
 import { Os } from "../../types/os";
