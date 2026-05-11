@@ -21,8 +21,8 @@ import { validateBinaryTarget } from "./vaildations";
 export const CommonBinaryArtifact = z
   .object({
     type: z.literal("bin"),
-    name: z.string(),
-    outputName: z.string().optional(),
+    name: z.string().min(1, "Artifact name is required"),
+    outputName: z.string().min(1).optional(),
   })
   .strict();
 
@@ -32,7 +32,7 @@ export const CommonBinaryArtifact = z
 export const CommonLibraryArtifact = z
   .object({
     type: z.literal("lib"),
-    name: z.string(),
+    name: z.string().min(1, "Artifact name is required"),
     headers: z.boolean().optional().default(false),
   })
   .strict();
@@ -45,7 +45,7 @@ export const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLi
 /** @lintignore */
 export type CommonBinaryArtifact = z.infer<typeof CommonBinaryArtifact>;
 /** @lintignore */
-export type CommonBinaryLibrary = z.infer<typeof CommonLibraryArtifact>;
+export type CommonLibraryArtifact = z.infer<typeof CommonLibraryArtifact>;
 
 // export type Artifact = z.infer<typeof Artifact>;
 
@@ -61,6 +61,8 @@ export type CommonBinaryLibrary = z.infer<typeof CommonLibraryArtifact>;
 /* @lintignore */
 export const CommonBinaryTarget = z
   .object({
+    id: z.string().min(1, "Target ID is required"),
+    for: z.string().min(1, "Target must point to an artifact name"),
     type: z.literal("bin"),
     os: enumFromObject(Os),
     arch: z
@@ -95,6 +97,8 @@ export const CommonBinaryTarget = z
 /* @lintignore */
 export const CommonLibraryTarget = z
   .object({
+    id: z.string().min(1, "Target ID is required"),
+    for: z.string().min(1, "Target must point to an artifact name"),
     type: z.literal("lib"),
     os: enumFromObject(Os),
     arch: z
@@ -128,6 +132,6 @@ export const CommonLibraryTarget = z
  */
 export const Target = createArtifactUnionHelper(CommonBinaryTarget, CommonLibraryTarget);
 /** @lintignore */
-export type CommonTargetArtifact = z.infer<typeof CommonBinaryArtifact>;
+export type CommonBinaryTarget = z.infer<typeof CommonBinaryTarget>;
 /** @lintignore */
-export type CommonTargetLibrary = z.infer<typeof CommonLibraryArtifact>;
+export type CommonLibraryTarget = z.infer<typeof CommonLibraryTarget>;

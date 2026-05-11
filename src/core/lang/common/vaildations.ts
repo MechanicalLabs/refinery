@@ -64,3 +64,35 @@ export function validateBinaryTarget(
     }
   }
 }
+
+/**
+ * Validates that all targets point to valid artifacts and types match.
+ */
+export function validateConfigReferences(
+  data: {
+    artifacts: { name: string; type: string }[];
+    targets: { id: string; for: string; type: string }[];
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const artifactNames = new Set(data.artifacts.map((a) => a.name));
+
+  for (const [index, target] of data.targets.entries()) {
+    if (!artifactNames.has(target.for)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Target '${target.id}' points to a non-existent artifact: '${target.for}'`,
+        path: ["targets", index, "for"],
+      });
+    }
+
+    const artifact = data.artifacts.find((a) => a.name === target.for);
+    if (artifact && artifact.type !== target.type) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Target '${target.id}' type '${target.type}' does not match artifact '${target.for}' type '${artifact.type}'`,
+        path: ["targets", index, "type"],
+      });
+    }
+  }
+}
