@@ -1,9 +1,12 @@
 import { cancel, confirm, group, intro, outro, select, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
+import type { Result } from "ripthrow";
 
 type StepResult<T> = T | symbol;
 
 type PromptValidator = (value: string | undefined) => string | undefined;
+
+const SIGINT_EXIT_CODE = 130;
 
 export class PromptGroup {
   private readonly introText: string;
@@ -22,20 +25,21 @@ export class PromptGroup {
     const result = await group(steps as unknown as Parameters<typeof group>[0], {
       onCancel: () => {
         cancel("Operation cancelled.");
-        process.exit(0);
+        process.exit(SIGINT_EXIT_CODE);
       },
     });
 
     return result as T;
   }
 
-  static spinner(): { task: (message: string, callback: () => Promise<void>) => Promise<void> } {
+  static spinner(): { task: <T>(message: string, callback: () => Promise<T>) => Promise<T> } {
     const s = spinner();
     return {
-      async task(message: string, callback: () => Promise<void>): Promise<void> {
+      async task<T>(message: string, callback: () => Promise<T>): Promise<T> {
         s.start(message);
-        await callback();
+        const result = await callback();
         s.stop(`${message} ${pc.green("done")}`);
+        return result;
       },
     };
   }
@@ -48,8 +52,9 @@ export class PromptGroup {
 export const step = {
   text: (
     message: string,
-    placeholder = "",
+    initialValue = "",
     validate?: (v: string) => string | undefined,
+    placeholder = "",
   ): (() => Promise<StepResult<string>>) => {
     // @ts-expect-error: Not all code paths return a value
     // This is intentional to allow for validation errors to be returned
@@ -63,6 +68,7 @@ export const step = {
       text({
         message,
         placeholder,
+        initialValue,
         validate: validator,
       }) as Promise<StepResult<string>>;
   },
@@ -90,4 +96,43 @@ export const step = {
     (message: string, initialValue = true): (() => Promise<StepResult<boolean>>) =>
     (): Promise<StepResult<boolean>> =>
       confirm({ message, initialValue }) as Promise<StepResult<boolean>>,
+
+  multiSelect:
+    <T>(
+      message: string,
+      options: { value: T; label: string; hint?: string }[],
+      required = true,
+    ): (() => Promise<StepResult<T[]>>) =>
+    (): Promise<StepResult<T[]>> =>
+      import("@clack/prompts").then((clack) =>
+        clack.multiselect({
+          message,
+          options: options.map((opt) => ({
+            ...opt,
+            hint: opt.hint ?? undefined,
+            // biome-ignore lint/suspicious/noExplicitAny: Clack types are difficult to map with generic T
+          })) as any,
+          required,
+        }),
+      ) as Promise<StepResult<T[]>>,
 };
+
+/**
+ * Bridges ripthrow Results with Clack's string | undefined requirement.
+ *
+ * Clack requires an explicit 'undefined' for success, but Biome's auto-formatting
+ * often strips 'return undefined', leading to TypeScript errors under
+ * 'noImplicitReturns'. We encapsulate the @ts-expect-error here to keep
+ * UI implementations clean and type-safe.
+ */
+export function toUiValidator(
+  validate: (v: string) => Result<void, string>,
+): (v: string) => string | undefined {
+  // @ts-expect-error: undefined return required by Clack UI contract
+  return (v: string): string | undefined => {
+    const res = validate(v);
+    if (!res.ok) {
+      return res.error;
+    }
+  };
+}

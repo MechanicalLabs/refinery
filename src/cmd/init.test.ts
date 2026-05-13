@@ -1,22 +1,37 @@
 import { expect, test } from "bun:test";
-import { Errors } from "../errors";
-import { validateProjectName } from "./init";
+import { validateName } from "../utils/naming";
 
-test("validateProjectName returns error for empty name", () => {
-  expect(validateProjectName("")).toBe(Errors.projectNameRequired().message);
+test("validateName returns error for empty name", () => {
+  const res = validateName("");
+  expect(res.ok).toBe(false);
+  if (!res.ok) {
+    expect(res.error).toBe("Name is required");
+  }
 });
 
-test("validateProjectName returns error for whitespace only", () => {
-  expect(validateProjectName("   ")).toBe(Errors.projectNameRequired().message);
+test("validateName returns error for whitespace only", () => {
+  const res = validateName("   ");
+  expect(res.ok).toBe(false);
+  if (!res.ok) {
+    expect(res.error).toBe("Name is required");
+  }
 });
 
-test("validateProjectName returns error for name with invalid chars", () => {
-  expect(validateProjectName("my$project")).toBe(Errors.projectNameInvalid().message);
-  expect(validateProjectName("my project")).toBe(Errors.projectNameInvalid().message);
+test("validateName returns error for name with invalid chars", () => {
+  const errorMsg = "Only lowercase letters, numbers, and hyphens are allowed";
+  const invalidNames = ["my$project", "my project", "App123", "my_project"];
+
+  for (const name of invalidNames) {
+    const res = validateName(name);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe(errorMsg);
+    }
+  }
 });
 
-test("validateProjectName returns undefined for valid name", () => {
-  expect(validateProjectName("refinery-app")).toBeUndefined();
-  expect(validateProjectName("my_project")).toBeUndefined();
-  expect(validateProjectName("App123")).toBeUndefined();
+test("validateName returns ok for valid name", () => {
+  expect(validateName("refinery-app").ok).toBe(true);
+  expect(validateName("my-project-123").ok).toBe(true);
+  expect(validateName("lib-x").ok).toBe(true);
 });
