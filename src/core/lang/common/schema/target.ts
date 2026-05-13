@@ -23,7 +23,7 @@ const BaseTargetSchema = z.object({
     .refine((items: string[]): boolean => new Set(items).size === items.length, {
       message: "Architectures must be unique",
     }),
-  abi: enumFromObject(Abi),
+  abi: enumFromObject(Abi).optional(),
   packages: z
     .array(enumFromObject(Package))
     .min(1)
