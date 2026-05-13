@@ -3,7 +3,7 @@
   "module": "src/index.ts",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "private": false,
   "devDependencies": {
     "@biomejs/biome": "2.4.14",
     "@types/bun": "latest",
@@ -12,6 +12,9 @@
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
+  },
+  "bin": {
+    "refinery": "./src/index.ts"
   },
   "scripts": {
     "format": "bun x @biomejs/biome format --write .",
