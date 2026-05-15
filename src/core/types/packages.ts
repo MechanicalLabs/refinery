@@ -6,5 +6,3 @@ export const Package = {
   // biome-ignore lint/style/useNamingConvention: it's a package name
   tar_gz: "tar.gz",
 } as const;
-
-// export type PackageType = (typeof Package)[keyof typeof Package];

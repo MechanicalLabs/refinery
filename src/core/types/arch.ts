@@ -6,5 +6,3 @@ export const Arch = {
   armv7: "armv7",
   wasm32: "wasm32",
 } as const;
-
-// export type ArchType = (typeof Arch)[keyof typeof Arch];

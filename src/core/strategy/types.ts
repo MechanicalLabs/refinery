@@ -14,6 +14,7 @@ export interface StrategyContext {
       exists: (path: string) => AsyncResult<void, Error>;
       readFile: (path: string) => AsyncResult<string, Error>;
       writeFile: (path: string, content: string) => AsyncResult<number, Error>;
+      mkdir: (path: string) => AsyncResult<void, Error>;
     };
   };
 }
@@ -38,4 +39,8 @@ export interface PlatformStrategy {
    * Performs side effects during initialization (e.g., creating CI/CD files).
    */
   onInit: (ctx: StrategyContext) => AsyncResult<void, Error>;
+  /**
+   * Syncs the refinery.toml manifest to the platform's CI configuration.
+   */
+  migrate: (ctx: StrategyContext) => AsyncResult<void, Error>;
 }

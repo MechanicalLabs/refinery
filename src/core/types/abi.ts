@@ -3,5 +3,3 @@ export const Abi = {
   musl: "musl",
   msvc: "msvc",
 } as const;
-
-// export type AbiType = (typeof Abi)[keyof typeof Abi];

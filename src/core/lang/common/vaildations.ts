@@ -1,8 +1,65 @@
-/** @swt-disable max-repetition */
 import type { z } from "zod";
 import { Abi } from "../../types/abi";
 import { Os } from "../../types/os";
 import { Package } from "../../types/packages";
+
+const DEFAULT_OUTPUT_PATTERN = "{name}-{os}-{arch}";
+const TRAILING_DASH_RE = /-$/u;
+
+function resolveOutputName(opts: {
+  pattern: string;
+  artifact: string;
+  os: string;
+  arch: string;
+  abi: string | undefined;
+}): string {
+  let resolved = opts.pattern
+    .replace("{name}", opts.artifact)
+    .replace("{os}", opts.os)
+    .replace("{arch}", opts.arch)
+    .replace("{abi}", opts.abi ?? "");
+
+  if (resolved === opts.artifact) {
+    resolved = `${resolved}-${opts.os}-${opts.arch}`;
+  }
+
+  resolved = resolved.replace(TRAILING_DASH_RE, "");
+
+  return resolved;
+}
+
+function checkArtifactCollisions(
+  artifact: { name: string; type: string; outputName?: string | undefined },
+  artIndex: number,
+  targets: { os: string; arch: string[]; abi?: string | undefined }[],
+  ctx: z.RefinementCtx,
+): boolean {
+  const pattern = artifact.outputName ?? DEFAULT_OUTPUT_PATTERN;
+  const seen = new Set<string>();
+
+  for (const target of targets) {
+    for (const arch of target.arch) {
+      const resolved = resolveOutputName({
+        pattern,
+        artifact: artifact.name,
+        os: target.os,
+        arch,
+        abi: target.abi,
+      });
+
+      if (seen.has(resolved)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Artifact '${artifact.name}' output name collision: multiple targets produce '${resolved}'. Add {os}, {arch}, or {abi} to outputName for uniqueness.`,
+          path: ["artifacts", artIndex, "outputName"],
+        });
+        return false;
+      }
+      seen.add(resolved);
+    }
+  }
+  return true;
+}
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: High complexity is inherent to the strict target platform validation rules.
 export function validateBinaryTarget(
@@ -93,6 +150,26 @@ export function validateConfigReferences(
         message: `Target '${target.id}' type '${target.type}' does not match artifact '${target.for}' type '${artifact.type}'`,
         path: ["targets", index, "type"],
       });
+    }
+  }
+}
+
+/**
+ * Validates that outputName patterns produce unique filenames across all targets.
+ */
+export function validateOutputNameCollisions(
+  data: {
+    artifacts: { name: string; type: string; outputName?: string | undefined }[];
+    targets: { id: string; for: string; os: string; arch: string[]; abi?: string | undefined }[];
+  },
+  ctx: z.RefinementCtx,
+): void {
+  for (const [artIndex, artifact] of data.artifacts.entries()) {
+    if (artifact.type === "bin") {
+      const targets = data.targets.filter((t) => t.for === artifact.name);
+      if (!checkArtifactCollisions(artifact, artIndex, targets, ctx)) {
+        return;
+      }
     }
   }
 }
