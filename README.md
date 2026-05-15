@@ -27,9 +27,6 @@ Because traditional CI workflows are **tedious, fragile, and slow.** Managing ma
 
 ## Quick Start
 ```bash
-# Get the refinery binary (coming soon)
-# curl -sSf https://refinery.sh/install.sh | sh
-
 # Initialize your project
 refinery init
 ```
