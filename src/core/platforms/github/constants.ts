@@ -29,10 +29,10 @@
  */
 
 export const Actions = {
-  checkout: "actions/checkout@v4",
+  checkout: "actions/checkout@v6",
   setupRust: "actions-rust-lang/setup-rust-toolchain@v1",
-  uploadArtifact: "actions/upload-artifact@v4",
-  downloadArtifact: "actions/download-artifact@v4",
-  ghRelease: "softprops/action-gh-release@v2",
-  createPullRequest: "peter-evans/create-pull-request@v7",
+  uploadArtifact: "actions/upload-artifact@v7",
+  downloadArtifact: "actions/download-artifact@v8",
+  ghRelease: "softprops/action-gh-release@v3",
+  createPullRequest: "peter-evans/create-pull-request@v8",
 } as const;
