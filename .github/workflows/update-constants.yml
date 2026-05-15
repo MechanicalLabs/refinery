@@ -1,0 +1,103 @@
+# Sync tracked actions in src/core/platforms/github/constants.ts
+# with the latest versions from their respective GitHub releases.
+# The version format determines update scope:
+#   @v4       (0 dots) → any major bump (v4 → v5)
+#   @v5.0     (1 dot)  → minor within major (v5.0 → v5.x)
+#   @v5.0.1   (2 dots) → patch within minor (v5.0.1 → v5.0.x)
+
+name: Update Action Constants
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  update-constants:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check and Update Constants
+        id: check_changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          CONSTANTS_FILE="src/core/platforms/github/constants.ts"
+
+          # Keep in sync with TRACKED_ACTIONS in constants.ts
+          REPOS=(
+            "actions/checkout"
+            "actions/upload-artifact"
+            "actions/download-artifact"
+            "softprops/action-gh-release"
+            "peter-evans/create-pull-request"
+            "actions-rust-lang/setup-rust-toolchain"
+          )
+
+          UPDATED=false
+
+          for repo in "${REPOS[@]}"; do
+            echo "Checking $repo..."
+
+            CURRENT_VER=$(grep -o "$repo@v[^\" ]*" "$CONSTANTS_FILE" | cut -d'@' -f2)
+            if [ -z "$CURRENT_VER" ]; then
+              echo "  No current version found, skipping."
+              continue
+            fi
+
+            DOT_COUNT=$(echo "$CURRENT_VER" | tr -cd '.' | wc -c)
+
+            case "$DOT_COUNT" in
+              0)
+                LATEST_IN_RANGE=$(gh api repos/$repo/tags --jq '.[].name' 2>/dev/null | \
+                  grep -oE '^v[0-9]+' | sort -V | tail -1)
+                ;;
+              1)
+                MAJOR="${CURRENT_VER%.*}"
+                LATEST_IN_RANGE=$(gh api repos/$repo/tags --jq '.[].name' 2>/dev/null | \
+                  grep -E "^${MAJOR}\." | grep -oE '^v[0-9]+\.[0-9]+' | sort -V | tail -1)
+                ;;
+              *)
+                MINOR="${CURRENT_VER%.*}"
+                LATEST_IN_RANGE=$(gh api repos/$repo/tags --jq '.[].name' 2>/dev/null | \
+                  grep -E "^${MINOR}\." | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+                ;;
+            esac
+
+            if [ -z "$LATEST_IN_RANGE" ]; then
+              echo "  No tags found for $repo, skipping."
+              continue
+            fi
+
+            if [ "$CURRENT_VER" != "$LATEST_IN_RANGE" ]; then
+              echo "  Updating $repo: $CURRENT_VER -> $LATEST_IN_RANGE"
+              sed -i "s|$repo@$CURRENT_VER|$repo@$LATEST_IN_RANGE|g" "$CONSTANTS_FILE"
+              UPDATED=true
+            else
+              echo "  Already at latest ($CURRENT_VER)."
+            fi
+          done
+
+          if [ "$UPDATED" = "true" ]; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update github action constants to latest versions"
+          title: "chore: update github action constants"
+          body: "Automated update of GitHub Action versions defined in constants.ts"
+          branch: "automation/update-constants"
+          base: "main"
+          delete-branch: true
