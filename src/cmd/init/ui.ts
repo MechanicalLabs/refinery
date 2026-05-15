@@ -50,7 +50,7 @@ export async function promptUser(): Promise<ProjectAnswers | undefined> {
     platform: platformStep,
   });
 
-  const artifacts = await promptArtifacts(ui);
+  const artifacts = await promptArtifacts(ui, baseAnswers.language);
   if (!artifacts) {
     return;
   }

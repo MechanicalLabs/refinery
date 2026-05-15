@@ -1,0 +1,13 @@
+- [ ] `refinery check` command for standalone validation
+- [ ] `refinery docs` interactive terminal documentation
+- [ ] Overhaul test suite: unit tests for matrix/triple/mapping logic, integration test for init+migrate, collision/validation tests
+- [ ] Own CI running `verify` + tests on every PR
+- [ ] Binary releases via `build:binary` on tags
+- [ ] Real musl cross-compilation (install `musl-tools`, configure linker)
+- [ ] Windows ARM64 MSVC cross-compilation (LLVM toolchain)
+- [ ] E2E test release exercising every matrix combination
+- [ ] Package generation: `deb`, `rpm`, `msi`, checksums per archive
+- [ ] `generate_release_notes: true` in release job
+- [ ] `includeInPackage` for extra files (LICENSE, README, etc.)
+- [ ] Full docs: CLI reference, schema reference, migration guide
+- [ ] Fix README examples to match actual schema

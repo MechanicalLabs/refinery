@@ -1,5 +1,6 @@
 import { Registry } from "../core/strategy/registry-class";
 import { initCmd } from "./init";
+import { migrateCmd } from "./migrate";
 import type { Cmd } from "./types";
 
-export const CommandRegistry = new Registry<Cmd>([initCmd]);
+export const CommandRegistry = new Registry<Cmd>([initCmd, migrateCmd]);

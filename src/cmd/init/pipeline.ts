@@ -1,8 +1,9 @@
 import path from "node:path";
 import pc from "picocolors";
 import { type AsyncResult, buildAsync, Ok, type Result, ResultBuilder } from "ripthrow";
-import { exists, readFile, writeFile } from "../../core/io/fs";
+import { exists, mkdir, readFile, writeFile } from "../../core/io/fs";
 import { saveManifest } from "../../core/io/manifest";
+import { DEFAULT_RUST_RELEASE } from "../../core/lang/rust/schema";
 import type { RefineryConfig } from "../../core/schema";
 import { LanguageRegistry, PlatformRegistry } from "../../core/strategy/registry";
 import type {
@@ -56,7 +57,12 @@ function createInitialManifest(ctx: InitContext): AsyncResult<InitContextWithMan
     targets: ctx.answers.targets,
   } as RefineryConfig;
 
-  return buildAsync(saveManifest(manifest)).map(
+  if (ctx.answers.language === "rust") {
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
+    (manifest as Record<string, unknown>)["release"] = DEFAULT_RUST_RELEASE;
+  }
+
+  return buildAsync<number, Error>(saveManifest(manifest)).map(
     (): InitContextWithManifest => ({ ...ctx, manifest }),
   ).result;
 }
@@ -76,7 +82,7 @@ function runStrategyHooks(
     cwd: process.cwd(),
     sys: {
       sh,
-      fs: { exists, readFile, writeFile },
+      fs: { exists, mkdir, readFile, writeFile },
     },
   };
 

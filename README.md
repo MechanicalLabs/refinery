@@ -37,20 +37,20 @@ refinery init
 ```toml
 # refinery.toml
 version = 1
-name = "my-app"
-language = "rust"
+lang = "rust"
 platform = "github"
 
-[[artifact]]
+[[artifacts]]
 name = "server"
 type = "bin"
-output_name = "server-{os}-{arch}"
+outputName = "server-{os}-{arch}"
 
-[[target]]
+[[targets]]
 id = "linux-stable"
 for = "server"
+type = "bin"
 os = "linux"
-archs = ["x86_64", "arm64"]
+arch = ["x86_64", "arm64"]
 packages = ["tar.gz", "deb"]
 ```
 
