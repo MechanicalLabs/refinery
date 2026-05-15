@@ -1,7 +1,10 @@
 import { createErrors } from "ripthrow";
 
 export const Errors = createErrors({
-  ioFileNotFound: { message: () => "File not found" },
+  ioFileNotFound: {
+    message: () => "File not found",
+    help: () => "Run 'refinery init' to create a refinery.toml",
+  },
   projectNameRequired: { message: () => "Name is required" },
   projectNameInvalid: {
     message: () => "Name can only contain lowercase letters, numbers, and hyphens",

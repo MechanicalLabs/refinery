@@ -1,5 +1,6 @@
+import { mkdir as nodeMkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type AsyncResult, Err, Ok, safeAsync } from "ripthrow";
+import { type AsyncResult, buildAsync, Err, Ok, safeAsync } from "ripthrow";
 import { Errors } from "../../errors";
 
 export function readFile(path: string): AsyncResult<string, Error> {
@@ -12,6 +13,10 @@ export function writeFile(path: string, content: string): AsyncResult<number, Er
   return safeAsync(Bun.write(fullPath, content));
 }
 
+export function mkdir(path: string): AsyncResult<void, Error> {
+  return buildAsync(safeAsync(nodeMkdir(path, { recursive: true }))).map(() => undefined).result;
+}
+
 export async function exists(path: string): AsyncResult<void, Error> {
   const fileExists = await Bun.file(resolve(path)).exists();
 
@@ -21,21 +26,3 @@ export async function exists(path: string): AsyncResult<void, Error> {
 
   return Err(Errors.ioFileNotFound());
 }
-
-// export function readJson<T>(path: string): AsyncResultBuilder<T, Error> {
-//   return AsyncResultBuilder.safeAsync(Bun.file(resolve(path)).json() as Promise<T>);
-// }
-
-// export async function writeJson(path: string, data: unknown): AsyncResult<number, Error> {
-//   const contentResult = safe(() => JSON.stringify(data, null, 2));
-
-//   if (!contentResult.ok) {
-//     return Err(contentResult.error as Error);
-//   }
-
-//   return await writeFile(path, contentResult.value);
-// }
-
-// export function getAbsolutePath(path: string): string {
-//   return resolve(path);
-// }

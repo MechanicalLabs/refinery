@@ -1,4 +1,4 @@
-import { type AsyncResult, buildAsync, safe } from "ripthrow";
+import { type AsyncResult, AsyncResultBuilder, buildAsync, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
 import type { AppError } from "../../errors";
 import { type RefineryConfig, RefineryConfigSchema } from "../schema";
@@ -8,7 +8,8 @@ const FILENAME = "refinery.toml";
 
 export function loadManifest(): AsyncResult<RefineryConfig, AppError | Error> {
   return buildAsync(exists(FILENAME))
-    .andThen(() => buildAsync(readFile(FILENAME)).context("Failed to read refinery.toml").result)
+    .andThen(() => readFile(FILENAME))
+    .note("Failed to read refinery.toml")
     .andThen((content) =>
       safe(() => {
         const data = parse(content);
@@ -18,13 +19,11 @@ export function loadManifest(): AsyncResult<RefineryConfig, AppError | Error> {
 }
 
 export function saveManifest(config: RefineryConfig): AsyncResult<number, Error> {
-  return buildAsync(Promise.resolve(safe(() => RefineryConfigSchema.parse(config))))
+  return AsyncResultBuilder.ok<RefineryConfig, Error>(config)
+    .andThen((validated) => safe(() => RefineryConfigSchema.parse(validated)))
+    .note("Invalid configuration schema")
+    .mapErr((e) => e as Error)
     .map((validated) => stringify(validated as unknown as Record<string, unknown>))
-    .andThen(
-      (content) =>
-        buildAsync(writeFile(FILENAME, content)).context(
-          "Failed to write refinery.toml",
-          "Make sure the current directory is writable",
-        ).result,
-    ).result;
+    .andThen((content) => writeFile(FILENAME, content))
+    .note("Failed to write refinery.toml").result as AsyncResult<number, Error>;
 }
