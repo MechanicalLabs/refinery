@@ -1,4 +1,5 @@
 export const Package = {
+  bin: "bin",
   msi: "msi",
   deb: "deb",
   rpm: "rpm",
