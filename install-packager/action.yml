@@ -7,7 +7,7 @@ inputs:
   version:
     description: "Release version (defaults to latest)"
     required: false
-    default: latest
+    default: packagers-latest
 runs:
   using: "composite"
   steps:

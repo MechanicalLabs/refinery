@@ -100,3 +100,9 @@ jobs:
           files: ./packages/*
           fail_on_unmatched_files: true
           generate_release_notes: false
+      - name: Update packagers-latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete packagers-latest --yes 2>/dev/null || true
+          gh release create packagers-latest --title "Packagers (latest)" --notes "" ./packages/*
