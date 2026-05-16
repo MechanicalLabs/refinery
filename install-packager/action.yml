@@ -1,0 +1,28 @@
+name: "Install Packager"
+description: "Downloads and installs a pre-compiled packaging tool (cargo-deb, cargo-rpm, cargo-wix) from Refinery releases"
+inputs:
+  tool:
+    description: "Tool name (cargo-deb, cargo-rpm, cargo-wix)"
+    required: true
+  version:
+    description: "Release version (defaults to latest)"
+    required: false
+    default: latest
+runs:
+  using: "composite"
+  steps:
+    - name: Install packager (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        TRIPLE=$(rustc -vV | grep host | cut -d' ' -f2 | sed 's/-unknown-linux-gnu/-unknown-linux-musl/')
+        curl -sSfL "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-${TRIPLE}.tar.gz" | tar xzf - -C /usr/local/bin
+    - name: Install packager (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $triple = (rustc -vV | Select-String "host").ToString().Split(" ")[1]
+        $url = "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-$triple.tar.gz"
+        $tmp = "$env:TEMP\${{ inputs.tool }}.tar.gz"
+        curl.exe -sSfL $url -o $tmp
+        tar xzf $tmp -C "$env:USERPROFILE\.cargo\bin"

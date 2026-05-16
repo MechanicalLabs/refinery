@@ -1,0 +1,64 @@
+name: "Setup Linker"
+description: "Installs cross-compilation linker dependencies and sets linker env vars for a given target triple"
+inputs:
+  target-triple:
+    description: "Rust target triple (e.g. aarch64-unknown-linux-gnu)"
+    required: true
+  extra-apt-packages:
+    description: "Extra apt packages to install (e.g. 'rpm')"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Install Linux cross-compilation deps
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        PKGS="${{ inputs.extra-apt-packages }}"
+        if echo "${{ inputs.target-triple }}" | grep -q "musl"; then
+          PKGS="$PKGS musl-tools"
+        fi
+        if echo "${{ inputs.target-triple }}" | grep -q "^i686" && ! echo "${{ inputs.target-triple }}" | grep -q "windows"; then
+          PKGS="$PKGS gcc-multilib"
+        fi
+        if echo "${{ inputs.target-triple }}" | grep -q "^armv7"; then
+          PKGS="$PKGS gcc-arm-linux-gnueabihf"
+        fi
+        if echo "${{ inputs.target-triple }}" | grep -q "^aarch64"; then
+          PKGS="$PKGS gcc-aarch64-linux-gnu"
+        fi
+        if [ -n "$PKGS" ]; then
+          sudo apt-get update && sudo apt-get install -y $PKGS
+        fi
+    - name: Set linker env
+      shell: bash
+      run: |
+        case "${{ inputs.target-triple }}" in
+          armv7-unknown-linux-gnueabihf)
+            echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> "$GITHUB_ENV"
+            ;;
+          aarch64-unknown-linux-gnu)
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+            ;;
+          aarch64-unknown-linux-musl)
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+            ;;
+          x86_64-unknown-linux-musl)
+            echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+            ;;
+          i686-unknown-linux-gnu)
+            echo "CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=gcc" >> "$GITHUB_ENV"
+            echo "RUSTFLAGS=-C link-arg=-m32" >> "$GITHUB_ENV"
+            ;;
+          i686-unknown-linux-musl)
+            echo "CARGO_TARGET_I686_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+            echo "RUSTFLAGS=-C link-arg=-m32" >> "$GITHUB_ENV"
+            ;;
+          i686-pc-windows-gnu)
+            echo "CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER=i686-w64-mingw32-gcc" >> "$GITHUB_ENV"
+            ;;
+          x86_64-pc-windows-gnu)
+            echo "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc" >> "$GITHUB_ENV"
+            ;;
+        esac
