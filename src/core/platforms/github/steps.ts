@@ -35,18 +35,20 @@ if ($wixDir -and (Test-Path "$($wixDir.FullName)\\bin\\candle.exe")) {
       shell: "powershell",
     },
     {
-      name: "Install MinGW (Windows GNU)",
-      if: "runner.os == 'Windows' && matrix.abi == 'gnu'",
-      run: `choco install mingw -y
-Add-Content $env:GITHUB_PATH "C:\\ProgramData\\mingw64\\mingw64\\bin"
-if ("\${{ matrix.arch }}" -eq "x86") {
-  $url = "https://github.com/niXman/mingw-builds-binaries/releases/download/15.2.0-rt_v13-rev0/i686-15.2.0-release-posix-dwarf-ucrt-rt_v13-rev0.7z"
-  $archive = "$env:TEMP\\mingw-i686.7z"
-  Invoke-WebRequest -Uri $url -OutFile $archive
-  7z x $archive -o"C:\\ProgramData\\mingw-i686" -y | Out-Null
-  Add-Content $env:GITHUB_PATH "C:\\ProgramData\\mingw-i686\\mingw32\\bin"
-}`,
-      shell: "powershell",
+      name: "Set up MinGW (x86_64)",
+      if: "runner.os == 'Windows' && matrix.abi == 'gnu' && matrix.arch == 'x86_64'",
+      uses: Actions.setupMingw,
+      with: {
+        platform: "x64",
+      },
+    },
+    {
+      name: "Set up MinGW (i686)",
+      if: "runner.os == 'Windows' && matrix.abi == 'gnu' && matrix.arch == 'x86'",
+      uses: Actions.setupMingw,
+      with: {
+        platform: "x86",
+      },
     },
   ];
 }

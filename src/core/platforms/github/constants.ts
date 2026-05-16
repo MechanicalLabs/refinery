@@ -37,4 +37,5 @@ export const Actions = {
   createPullRequest: "peter-evans/create-pull-request@v8",
   installPackager: "MechanicalLabs/refinery/install-packager@main",
   setupLinker: "MechanicalLabs/refinery/setup-linker@main",
+  setupMingw: "egor-tensin/setup-mingw@v3",
 } as const;
