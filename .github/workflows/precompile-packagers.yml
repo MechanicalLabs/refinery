@@ -27,27 +27,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
-      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: ${{ matrix.target }}
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-          if echo "${{ matrix.target }}" | grep -q "^aarch64"; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build ${{ matrix.tool }}
         run: cargo install ${{ matrix.tool }} --target ${{ matrix.target }}
       - name: Package binary
         run: tar czf ${{ matrix.tool }}-${{ matrix.target }}.tar.gz -C "$HOME/.cargo/bin" ${{ matrix.tool }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.tool }}-${{ matrix.target }}
           path: ${{ matrix.tool }}-${{ matrix.target }}.tar.gz
@@ -67,7 +62,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -79,7 +74,7 @@ jobs:
         run: tar czf ${{ matrix.tool }}-${{ matrix.target }}.tar.gz -C "$HOME/.cargo/bin" cargo-wix.exe
         shell: bash
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.tool }}-${{ matrix.target }}
           path: ${{ matrix.tool }}-${{ matrix.target }}.tar.gz
@@ -92,7 +87,7 @@ jobs:
       contents: write
     steps:
       - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: ./packages
@@ -100,7 +95,7 @@ jobs:
         run: find ./packages -type f | sort
         shell: bash
       - name: Publish Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./packages/*
           fail_on_unmatched_files: true
