@@ -119,7 +119,15 @@ export async function promptArchitectures(
     { value: Arch.arm64, label: "arm64" },
     { value: Arch.armv7, label: "armv7" },
     { value: Arch.x86, label: "x86" },
-  ];
+  ].filter((opt) => {
+    if (os === "macos") {
+      return opt.value === Arch.arm64 || opt.value === Arch.x86_64;
+    }
+    if (os === "windows") {
+      return opt.value !== Arch.armv7;
+    }
+    return true;
+  });
 
   let abiKey = "none";
   if (abi) {
