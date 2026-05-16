@@ -1,4 +1,4 @@
-name: "Refinery"
+name: "Refinery-Build"
 description: "Cross-compilation linker setup for Rust targets. Sub-actions: install-packager, setup-linker."
 branding:
   icon: "package"
