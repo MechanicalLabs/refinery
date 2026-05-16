@@ -1,4 +1,5 @@
-import { mkdir as nodeMkdir } from "node:fs/promises";
+import { existsSync as nodeExistsSync } from "node:fs";
+import { mkdir as nodeMkdirAsync } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type AsyncResult, buildAsync, Err, Ok, safeAsync } from "ripthrow";
 import { Errors } from "../../errors";
@@ -14,7 +15,8 @@ export function writeFile(path: string, content: string): AsyncResult<number, Er
 }
 
 export function mkdir(path: string): AsyncResult<void, Error> {
-  return buildAsync(safeAsync(nodeMkdir(path, { recursive: true }))).map(() => undefined).result;
+  return buildAsync(safeAsync(nodeMkdirAsync(path, { recursive: true }))).map(() => undefined)
+    .result;
 }
 
 export async function exists(path: string): AsyncResult<void, Error> {
@@ -25,4 +27,8 @@ export async function exists(path: string): AsyncResult<void, Error> {
   }
 
   return Err(Errors.ioFileNotFound());
+}
+
+export function existsSync(path: string): boolean {
+  return nodeExistsSync(resolve(path));
 }

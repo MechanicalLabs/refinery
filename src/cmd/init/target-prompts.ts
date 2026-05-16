@@ -2,6 +2,7 @@ import { isCancel, multiselect } from "@clack/prompts";
 import pc from "picocolors";
 import type { Result } from "ripthrow";
 import { Err, Ok } from "ripthrow";
+import { existsSync } from "../../core/io/fs";
 import type {
   CommonBinaryArtifact,
   CommonLibraryArtifact,
@@ -221,8 +222,18 @@ export async function promptIncludeFiles(): Promise<string[]> {
   const include = (await step.text(
     "Extra files to include in archive (space-separated, e.g. README.md LICENSE)",
     "",
-    undefined,
-    "",
+    // @ts-expect-error: Implicit return undefined is required for success case
+    (v: string): string | undefined => {
+      if (!v.trim()) {
+        return;
+      }
+      const files = v.trim().split(WHITESPACE_REGEX);
+      for (const f of files) {
+        if (!existsSync(f)) {
+          return `File not found: ${f}`;
+        }
+      }
+    },
   )()) as string;
 
   if (isCancel(include) || !include.trim()) {
