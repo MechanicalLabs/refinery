@@ -2,8 +2,10 @@ import path from "node:path";
 import { type AsyncResult, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
+import type { RefineryConfig } from "../core/schema";
 import { PlatformRegistry } from "../core/strategy/registry";
 import type { StrategyContext } from "../core/strategy/types";
+import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import { parseCargoToml } from "../utils/cargo";
@@ -59,6 +61,31 @@ async function validateArtifacts(config: {
   return Ok();
 }
 
+async function validateTargets(config: RefineryConfig): AsyncResult<void, Error> {
+  const allChecks = config.targets.flatMap((target) => {
+    const include = target.includeInPackage ?? [];
+    return include.map((file) => ({
+      file,
+      targetId: target.id,
+    }));
+  });
+
+  const results = await Promise.all(
+    allChecks.map(async (check) => ({
+      ...check,
+      exists: (await exists(check.file)).ok,
+    })),
+  );
+
+  for (const result of results) {
+    if (!result.exists) {
+      return Err(Errors.missingTargetFile({ file: result.file, targetId: result.targetId }));
+    }
+  }
+
+  return Ok();
+}
+
 async function runMigrate(): AsyncResult<void, Error> {
   const manifestResult = await loadManifest();
   if (!manifestResult.ok) {
@@ -67,9 +94,14 @@ async function runMigrate(): AsyncResult<void, Error> {
 
   const config = manifestResult.value;
 
-  const validationResult = await validateArtifacts(config);
-  if (!validationResult.ok) {
-    return validationResult;
+  const artifactValidation = await validateArtifacts(config);
+  if (!artifactValidation.ok) {
+    return artifactValidation;
+  }
+
+  const targetValidation = await validateTargets(config);
+  if (!targetValidation.ok) {
+    return targetValidation;
   }
 
   const platformResult = PlatformRegistry.get(config.platform);
