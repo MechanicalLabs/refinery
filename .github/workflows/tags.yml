@@ -1,0 +1,40 @@
+name: Update Floating Tags
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  update-tags:
+    name: Update Floating Tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Update Tags
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "Processing tag: $TAG"
+          
+          # Extract major and minor versions (e.g., v1.2.3 -> v1 and v1.2)
+          MAJOR=$(echo "$TAG" | cut -d. -f1)
+          MINOR=$(echo "$TAG" | cut -d. -f1,2)
+
+          echo "Major: $MAJOR, Minor: $MINOR"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Force update major tag
+          git tag -fa "$MAJOR" -m "Update $MAJOR to $TAG"
+          git push origin "$MAJOR" --force
+
+          # Force update minor tag
+          git tag -fa "$MINOR" -m "Update $MINOR to $TAG"
+          git push origin "$MINOR" --force
