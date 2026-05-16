@@ -1,0 +1,15 @@
+export const TRIPLES: Record<string, string> = Object.fromEntries([
+  ["linux/x86_64", "x86_64-unknown-linux-gnu"],
+  ["linux/x86_64:musl", "x86_64-unknown-linux-musl"],
+  ["linux/arm64", "aarch64-unknown-linux-gnu"],
+  ["linux/arm64:musl", "aarch64-unknown-linux-musl"],
+  ["linux/x86", "i686-unknown-linux-gnu"],
+  ["linux/armv7", "armv7-unknown-linux-gnueabihf"],
+  ["macos/x86_64", "x86_64-apple-darwin"],
+  ["macos/arm64", "aarch64-apple-darwin"],
+  ["windows/x86_64", "x86_64-pc-windows-msvc"],
+  ["windows/x86_64:gnu", "x86_64-pc-windows-gnu"],
+  ["windows/arm64", "aarch64-pc-windows-msvc"],
+  ["windows/x86", "i686-pc-windows-msvc"],
+  ["windows/x86:gnu", "i686-pc-windows-gnu"],
+]);
