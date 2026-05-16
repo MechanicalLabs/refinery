@@ -16,13 +16,12 @@ runs:
       shell: bash
       run: |
         TRIPLE=$(rustc -vV | grep host | cut -d' ' -f2 | sed 's/-unknown-linux-gnu/-unknown-linux-musl/')
-        curl -sSfL "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-${TRIPLE}.tar.gz" | tar xzf - -C /usr/local/bin
+        curl -sSfL "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-${TRIPLE}" -o "/usr/local/bin/${{ inputs.tool }}"
+        chmod +x "/usr/local/bin/${{ inputs.tool }}"
     - name: Install packager (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         $triple = (rustc -vV | Select-String "host").ToString().Split(" ")[1]
-        $url = "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-$triple.tar.gz"
-        $tmp = "$env:TEMP\${{ inputs.tool }}.tar.gz"
-        curl.exe -sSfL $url -o $tmp
-        tar xzf $tmp -C "$env:USERPROFILE\.cargo\bin"
+        $url = "https://github.com/MechanicalLabs/refinery/releases/${{ inputs.version }}/download/${{ inputs.tool }}-$triple"
+        curl.exe -sSfL $url -o "$env:USERPROFILE\.cargo\bin\${{ inputs.tool }}.exe"

@@ -39,13 +39,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build ${{ matrix.tool }}
         run: cargo install ${{ matrix.tool }} --target ${{ matrix.target }}
-      - name: Package binary
-        run: tar czf ${{ matrix.tool }}-${{ matrix.target }}.tar.gz -C "$HOME/.cargo/bin" ${{ matrix.tool }}
+      - name: Copy binary
+        run: cp "$HOME/.cargo/bin/${{ matrix.tool }}" "${{ matrix.tool }}-${{ matrix.target }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.tool }}-${{ matrix.target }}
-          path: ${{ matrix.tool }}-${{ matrix.target }}.tar.gz
+          path: ${{ matrix.tool }}-${{ matrix.target }}
 
   build-windows-packagers:
     name: ${{ matrix.tool }} (${{ matrix.target }})
@@ -70,14 +70,14 @@ jobs:
       - name: Build ${{ matrix.tool }}
         run: cargo install ${{ matrix.tool }} --target ${{ matrix.target }}
         shell: bash
-      - name: Package binary
-        run: tar czf ${{ matrix.tool }}-${{ matrix.target }}.tar.gz -C "$HOME/.cargo/bin" cargo-wix.exe
+      - name: Copy binary
         shell: bash
+        run: cp "$HOME/.cargo/bin/${{ matrix.tool }}.exe" "${{ matrix.tool }}-${{ matrix.target }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.tool }}-${{ matrix.target }}
-          path: ${{ matrix.tool }}-${{ matrix.target }}.tar.gz
+          path: ${{ matrix.tool }}-${{ matrix.target }}
 
   create-release:
     name: Create Release

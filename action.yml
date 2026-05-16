@@ -1,0 +1,20 @@
+name: "Refinery"
+description: "Cross-compilation linker setup for Rust targets. Sub-actions: install-packager, setup-linker."
+branding:
+  icon: "package"
+  color: "orange"
+inputs:
+  target-triple:
+    description: "Rust target triple (e.g. aarch64-unknown-linux-gnu)"
+    required: true
+  extra-apt-packages:
+    description: "Extra apt packages to install (e.g. 'rpm')"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - uses: ./setup-linker
+      with:
+        target-triple: ${{ inputs.target-triple }}
+        extra-apt-packages: ${{ inputs.extra-apt-packages }}
