@@ -91,11 +91,11 @@ function getTargetTriple(os: string, arch: string, abi?: string): string {
 }
 
 function getDefaultPackages(os: string): string[] {
+  let archive = "tar.gz";
   if (os === "windows") {
-    return ["zip"];
+    archive = "zip";
   }
-
-  return ["tar.gz"];
+  return ["bin", archive];
 }
 
 function resolveOutputName(

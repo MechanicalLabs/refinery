@@ -6,6 +6,7 @@ import type {
 } from "../../core/lang/common/schema/artifact";
 import type { CommonBinaryTarget, CommonLibraryTarget } from "../../core/lang/common/schema/target";
 import { isAbiRequired } from "../../core/types/compatibility";
+import { Package } from "../../core/types/packages";
 import { logger } from "../../ui/log";
 import { step } from "../../ui/prompt";
 import { type CoverageMap, getAvailableOsOptions, updateCoverage } from "./coverage";
@@ -13,6 +14,8 @@ import {
   createTargetObject,
   promptAbi,
   promptArchitectures,
+  promptIncludeFiles,
+  promptPackages,
   promptTargetBase,
 } from "./target-prompts";
 
@@ -116,15 +119,31 @@ async function promptSingleTarget(
     return;
   }
 
+  const pkgs = await promptPackages(base.os);
+  if (isCancel(pkgs)) {
+    return pkgs;
+  }
+
+  const hasArchive = pkgs.includes(Package.tar_gz) || pkgs.includes(Package.zip);
+  let includeFiles: string[] = [];
+  if (hasArchive) {
+    includeFiles = await promptIncludeFiles();
+    if (isCancel(includeFiles)) {
+      return includeFiles;
+    }
+  }
+
   usedIds.add(base.id.trim());
   updateCoverage({ artifactName: artifact.name, os: base.os, abi: abi as string, archs, coverage });
 
-  return await createTargetObject(
-    { id: base.id.trim(), for: artifact.name, os: base.os },
+  return await createTargetObject({
+    baseInfo: { id: base.id.trim(), for: artifact.name, os: base.os },
     artifact,
     archs,
-    abi as string,
-  );
+    abi: abi as string,
+    packages: pkgs,
+    includeInPackage: includeFiles,
+  });
 }
 
 /**

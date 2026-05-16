@@ -1,4 +1,4 @@
-import { isCancel } from "@clack/prompts";
+import { isCancel, multiselect } from "@clack/prompts";
 import pc from "picocolors";
 import type { Result } from "ripthrow";
 import { Err, Ok } from "ripthrow";
@@ -11,6 +11,7 @@ import { Abi } from "../../core/types/abi";
 import { Arch } from "../../core/types/arch";
 import { getCompatibleAbis } from "../../core/types/compatibility";
 import type { Os } from "../../core/types/os";
+import { Package } from "../../core/types/packages";
 import { logger } from "../../ui/log";
 import { step, toUiValidator } from "../../ui/prompt";
 import { validateName } from "../../utils/naming";
@@ -18,6 +19,17 @@ import { type CoverageMap, TOTAL_ARCHS } from "./coverage";
 
 type Artifact = CommonBinaryArtifact | CommonLibraryArtifact;
 type Target = CommonBinaryTarget | CommonLibraryTarget;
+
+interface CreateTargetOptions {
+  baseInfo: { id: string; for: string; os: string };
+  artifact: Artifact;
+  archs: (keyof typeof Arch)[];
+  abi: string | undefined;
+  packages?: (typeof Package)[keyof typeof Package][];
+  includeInPackage?: string[];
+}
+
+const WHITESPACE_REGEX = /\s+/u;
 
 /**
  * Prompts for OS and a unique Target Identifier.
@@ -156,14 +168,81 @@ export async function promptArchitectures(
 }
 
 /**
+ * Prompts for which package formats to build, filtered by OS.
+ */
+export async function promptPackages(
+  os: string,
+): Promise<(typeof Package)[keyof typeof Package][] | symbol> {
+  const options: { value: string; label: string; hint?: string }[] = [
+    { value: Package.bin, label: "Binary", hint: "raw executable" },
+  ];
+
+  if (os === "linux") {
+    options.push(
+      { value: Package.tar_gz, label: "tar.gz", hint: "compressed archive" },
+      { value: Package.deb, label: ".deb", hint: "Debian/Ubuntu package" },
+      { value: Package.rpm, label: ".rpm", hint: "Fedora/RHEL package" },
+    );
+  } else if (os === "windows") {
+    options.push(
+      { value: Package.zip, label: "ZIP", hint: "compressed archive" },
+      { value: Package.msi, label: ".msi", hint: "Windows Installer" },
+    );
+  } else if (os === "macos") {
+    options.push({ value: Package.tar_gz, label: "tar.gz", hint: "compressed archive" });
+  }
+
+  let defaultArchive: string;
+  if (os === "windows") {
+    defaultArchive = Package.zip;
+  } else {
+    defaultArchive = Package.tar_gz;
+  }
+  const defaults = [Package.bin, defaultArchive];
+
+  const pkgs = await multiselect({
+    message: "Package Formats",
+    options,
+    required: true,
+    initialValues: defaults,
+  });
+
+  if (isCancel(pkgs)) {
+    return pkgs;
+  }
+
+  return pkgs as (typeof Package)[keyof typeof Package][];
+}
+
+/**
+ * Prompts for extra files to include in the archive.
+ */
+export async function promptIncludeFiles(): Promise<string[]> {
+  const include = (await step.text(
+    "Extra files to include in archive (space-separated, e.g. README.md LICENSE)",
+    "",
+    undefined,
+    "",
+  )()) as string;
+
+  if (isCancel(include) || !include.trim()) {
+    return [];
+  }
+
+  return include.trim().split(WHITESPACE_REGEX);
+}
+
+/**
  * Builds a type-safe target object based on the gathered answers.
  */
-export async function createTargetObject(
-  baseInfo: { id: string; for: string; os: string },
-  artifact: Artifact,
-  archs: (keyof typeof Arch)[],
-  abi: string | undefined,
-): Promise<Target | undefined | symbol> {
+export async function createTargetObject({
+  baseInfo,
+  artifact,
+  archs,
+  abi,
+  packages,
+  includeInPackage,
+}: CreateTargetOptions): Promise<Target | undefined | symbol> {
   const osType = baseInfo.os as (typeof Os)[keyof typeof Os];
   const archTypes = archs as (typeof Arch)[keyof typeof Arch][];
 
@@ -178,6 +257,12 @@ export async function createTargetObject(
 
     if (abi) {
       binTarget.abi = abi as (typeof Abi)[keyof typeof Abi];
+    }
+    if (packages && packages.length > 0) {
+      binTarget.packages = packages;
+    }
+    if (includeInPackage && includeInPackage.length > 0) {
+      binTarget.includeInPackage = includeInPackage;
     }
 
     return binTarget;
