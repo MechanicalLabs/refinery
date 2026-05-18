@@ -20,7 +20,7 @@ async function checkPreconditions(force: boolean): AsyncResult<boolean, Error> {
   }
 
   const result = matchErr(manifestResult)
-    .on(Errors.ioFileNotFound, () => Ok(true))
+    .on(Errors.manifestNotFound, () => Ok(true))
     .otherwise((err) => Err(err));
 
   return result as AsyncResult<boolean, Error>;

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { isCancel } from "@clack/prompts";
-import { buildAsync, matchErr, Ok } from "ripthrow";
+import { buildAsync, Err, matchErr, Ok } from "ripthrow";
 import { exists, readFile } from "../../core/io/fs";
 import type {
   CommonBinaryArtifact,
@@ -35,36 +35,37 @@ function detectRustArtifacts(content: string): Artifact[] {
   return artifacts;
 }
 
-async function promptRustArtifacts(): Promise<Artifact[] | undefined> {
-  const result = await buildAsync(exists("Cargo.toml"))
+function promptRustArtifacts(): Promise<Artifact[] | undefined> {
+  return buildAsync(exists("Cargo.toml"))
     .andThen(() => readFile("Cargo.toml"))
-    .map(detectRustArtifacts).result;
+    .map(detectRustArtifacts)
+    .match({
+      ok: (artifacts: Artifact[]): Artifact[] | undefined => {
+        if (artifacts.length === 0) {
+          logger.error("No binaries or libraries found in Cargo.toml.");
+          return;
+        }
 
-  if (result.ok) {
-    const artifacts = result.value;
-    if (artifacts.length === 0) {
-      logger.error("No binaries or libraries found in Cargo.toml.");
-      return;
-    }
-
-    logger.info(`Detected ${artifacts.length} artifact(s) from Cargo.toml:`);
-    for (const a of artifacts) {
-      let label = "lib";
-      if (a.type === "bin") {
-        label = "bin";
-      }
-      logger.info(`  ${label}: ${a.name}`);
-    }
-    return artifacts;
-  }
-
-  return matchErr(result)
-    .on(Errors.ioFileNotFound, () => {
-      logger.error("No Cargo.toml found. Run `cargo init` or `cargo new` first.");
-    })
-    .otherwise((err) => {
-      logger.error(`Failed to read Cargo.toml: ${err.message}`);
-    }) as Artifact[] | undefined;
+        logger.info(`Detected ${artifacts.length} artifact(s) from Cargo.toml:`);
+        for (const a of artifacts) {
+          let label = "lib";
+          if (a.type === "bin") {
+            label = "bin";
+          }
+          logger.info(`  ${label}: ${a.name}`);
+        }
+        return artifacts;
+      },
+      err: (err: Error): Artifact[] | undefined =>
+        // @ts-expect-error
+        matchErr(Err(err))
+          .on(Errors.ioFileNotFound, () => {
+            logger.error("No Cargo.toml found. Run `cargo init` or `cargo new` first.");
+          })
+          .otherwise(() => {
+            logger.error(`Failed to read Cargo.toml: ${err.message}`);
+          }),
+    });
 }
 
 /**

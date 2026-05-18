@@ -2,7 +2,10 @@ import { createErrors } from "ripthrow";
 
 export const Errors = createErrors({
   ioFileNotFound: {
-    message: () => "File not found",
+    message: (args: { path: string }) => `File not found: '${args.path}'`,
+  },
+  manifestNotFound: {
+    message: () => "refinery.toml not found",
     help: () => "Run 'refinery init' to create a refinery.toml",
   },
   projectNameRequired: { message: () => "Name is required" },

@@ -26,7 +26,7 @@ export async function exists(path: string): AsyncResult<void, Error> {
     return Ok();
   }
 
-  return Err(Errors.ioFileNotFound());
+  return Err(Errors.ioFileNotFound({ path }));
 }
 
 export function existsSync(path: string): boolean {
