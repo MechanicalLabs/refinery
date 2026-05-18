@@ -36,7 +36,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - name: Install musl-tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y musl-tools
       - name: Build ${{ matrix.tool }}
         run: cargo install ${{ matrix.tool }} --target ${{ matrix.target }}
       - name: Copy binary
