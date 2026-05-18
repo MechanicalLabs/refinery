@@ -56,11 +56,6 @@ if ($wixDir -and (Test-Path "$($wixDir.FullName)\\bin\\candle.exe")) {
 function buildCompilationSteps(): Step[] {
   return [
     {
-      name: "Install Target",
-      run: "rustup target add ${{ matrix.target_triple }}",
-      shell: "bash",
-    },
-    {
       name: "Build",
       run: "cargo build --release --target ${{ matrix.target_triple }}",
       shell: "bash",
@@ -160,7 +155,14 @@ function buildUploadSteps(): Step[] {
 function buildSteps(): Step[] {
   return [
     { name: "Checkout", uses: Actions.checkout },
-    { name: "Setup Rust", uses: Actions.setupRust },
+    {
+      name: "Setup Rust",
+      uses: Actions.setupRust,
+      with: {
+        target: "${{ matrix.target_triple }}",
+        cache: true,
+      },
+    },
     ...buildSystemDependenciesSteps(),
     ...buildCompilationSteps(),
     ...buildPreparationSteps(),
