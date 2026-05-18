@@ -29,7 +29,7 @@ runs:
           PKGS="$PKGS gcc-aarch64-linux-gnu"
         fi
         if [ -n "$PKGS" ]; then
-          sudo apt-get update && sudo apt-get install -y $PKGS
+          sudo apt-get update && sudo apt-get install --no-install-recommends -y $PKGS
         fi
     - name: Set linker env
       shell: bash
