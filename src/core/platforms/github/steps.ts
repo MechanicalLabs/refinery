@@ -81,7 +81,48 @@ function buildPreparationSteps(): Step[] {
   return [
     {
       name: "Prepare Binary",
+      if: "matrix.artifact_type == 'bin'",
       run: 'SRC="target/${{ matrix.target_triple }}/release/${{ matrix.artifact_bin }}${{ matrix.bin_ext }}"\nDST_ORIG="target/release/${{ matrix.artifact_bin }}${{ matrix.bin_ext }}"\nDST_RENAMED="target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}"\n\nmkdir -p target/release\ncp "$SRC" "$DST_ORIG"\ncp "$SRC" "$DST_RENAMED"',
+      shell: "bash",
+    },
+    {
+      name: "Prepare Library",
+      if: "matrix.artifact_type == 'lib'",
+      run: [
+        'SRCDIR="target/${{ matrix.target_triple }}/release"',
+        'DSTDIR="target/release"',
+        'mkdir -p "$DSTDIR"',
+        "",
+        "copy_lib() {",
+        '  local src_file="$1"',
+        '  local dst_orig_file="$2"',
+        '  local dst_renamed_file="$3"',
+        '  if [ -f "$src_file" ]; then',
+        '    cp "$src_file" "$DSTDIR/$dst_orig_file"',
+        '    cp "$src_file" "$DSTDIR/$dst_renamed_file"',
+        "  fi",
+        "}",
+        "",
+        'NAME="${{ matrix.artifact_bin }}"',
+        'OUT="${{ matrix.output_name }}"',
+        "",
+        'copy_lib "$SRCDIR/lib${NAME}.so" "lib${NAME}.so" "lib${OUT}.so"',
+        'copy_lib "$SRCDIR/lib${NAME}.dylib" "lib${NAME}.dylib" "lib${OUT}.dylib"',
+        'copy_lib "$SRCDIR/lib${NAME}.a" "lib${NAME}.a" "lib${OUT}.a"',
+        'copy_lib "$SRCDIR/${NAME}.dll" "${NAME}.dll" "${OUT}.dll"',
+        'copy_lib "$SRCDIR/${NAME}.lib" "${NAME}.lib" "${OUT}.lib"',
+        'copy_lib "$SRCDIR/lib${NAME}.dll.a" "lib${NAME}.dll.a" "lib${OUT}.dll.a"',
+        'copy_lib "$SRCDIR/${NAME}.wasm" "${NAME}.wasm" "${OUT}.wasm"',
+        "",
+        'if [ "${{ matrix.headers }}" = "true" ]; then',
+        '  if [ -f "cbindgen.toml" ]; then',
+        '    cbindgen --config cbindgen.toml --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
+        "  else",
+        '    cbindgen --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
+        "  fi",
+        '  cp "$DSTDIR/${OUT}.h" "$DSTDIR/${NAME}.h"',
+        "fi",
+      ].join("\n"),
       shell: "bash",
     },
     {
@@ -135,8 +176,14 @@ function buildBinarySteps(): Step[] {
   return [
     {
       name: "Export Binary",
-      if: "${{ matrix.has_bin }}",
+      if: "(matrix.has_bin) && (matrix.artifact_type == 'bin')",
       run: 'mkdir -p _packages\ncp "target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}" "_packages/"',
+      shell: "bash",
+    },
+    {
+      name: "Export Library",
+      if: "(matrix.has_bin) && (matrix.artifact_type == 'lib')",
+      run: "mkdir -p _packages\ncp target/release/lib${{ matrix.output_name }}.* _packages/ 2>/dev/null || true\ncp target/release/${{ matrix.output_name }}.* _packages/ 2>/dev/null || true",
       shell: "bash",
     },
   ];
@@ -145,9 +192,32 @@ function buildBinarySteps(): Step[] {
 function buildArchiveSteps(): Step[] {
   return [
     {
-      name: "Package",
-      if: "${{ matrix.has_archive }}",
+      name: "Package Binary",
+      if: "(matrix.has_archive) && (matrix.artifact_type == 'bin')",
       run: 'ARCHIVE_DIR="${PWD}/_packages"\nmkdir -p "$ARCHIVE_DIR"\nSTAGING_DIR="target/archive_staging/${{ matrix.output_name }}"\nmkdir -p "$STAGING_DIR"\ncp "target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}" "$STAGING_DIR/"\nfor f in ${{ join(matrix.include_files, \' \') }}; do\n  if [ -f "$f" ]; then\n    cp "$f" "$STAGING_DIR/"\n  fi\ndone\n\nif [ "${{ matrix.package_type }}" = "zip" ]; then\n  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${{ matrix.output_name }}.zip" .) > /dev/null\nelse\n  tar -czf "$ARCHIVE_DIR/${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .\nfi',
+      shell: "bash",
+    },
+    {
+      name: "Package Library",
+      if: "(matrix.has_archive) && (matrix.artifact_type == 'lib')",
+      run: [
+        'ARCHIVE_DIR="${PWD}/_packages"',
+        'mkdir -p "$ARCHIVE_DIR"',
+        'STAGING_DIR="target/archive_staging/${{ matrix.output_name }}"',
+        'mkdir -p "$STAGING_DIR"',
+        'cp target/release/lib${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true',
+        'cp target/release/${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true',
+        "for f in ${{ join(matrix.include_files, ' ') }}; do",
+        '  if [ -f "$f" ]; then',
+        '    cp "$f" "$STAGING_DIR/"',
+        "  fi",
+        "done",
+        'if [ "${{ matrix.package_type }}" = "zip" ]; then',
+        '  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${{ matrix.output_name }}.zip" .) > /dev/null',
+        "else",
+        '  tar -czf "$ARCHIVE_DIR/${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .',
+        "fi",
+      ].join("\n"),
       shell: "bash",
     },
   ];
@@ -227,6 +297,24 @@ function translateCheckout(baseIf?: string): Step {
   return step;
 }
 
+function buildCbindgenInstallStep(config: RefineryConfig): Step | undefined {
+  // Check if any target or artifact has headers enabled
+  const hasHeaders =
+    config.targets?.some((t) => t.type === "lib" && t.headers) ||
+    config.artifacts?.some((a) => a.type === "lib" && a.headers);
+  if (!hasHeaders) {
+    return;
+  }
+  return {
+    name: "Install cbindgen",
+    if: "matrix.headers == true",
+    uses: "taiki-e/install-action@v2",
+    with: {
+      tool: "cbindgen",
+    },
+  };
+}
+
 function translateSetupToolchain(step: PreBuildStep | PostBuildStep, baseIf?: string): Step {
   const s: Step = {
     name: "Setup Rust",
@@ -292,7 +380,11 @@ function translateUploadArtifact(step: PreBuildStep | PostBuildStep, baseIf?: st
   return s;
 }
 
-function translateBuiltinStep(step: PreBuildStep | PostBuildStep, baseIf?: string): Step[] {
+function translateBuiltinStep(
+  step: PreBuildStep | PostBuildStep,
+  config: RefineryConfig,
+  baseIf?: string,
+): Step[] {
   if (step.type !== "builtin") {
     return [];
   }
@@ -300,7 +392,15 @@ function translateBuiltinStep(step: PreBuildStep | PostBuildStep, baseIf?: strin
     return [translateCheckout(baseIf)];
   }
   if (step.builtin === "setup_toolchain") {
-    return [translateSetupToolchain(step, baseIf)];
+    const steps = [translateSetupToolchain(step, baseIf)];
+    const installCbindgen = buildCbindgenInstallStep(config);
+    if (installCbindgen) {
+      if (baseIf) {
+        installCbindgen.if = `(${installCbindgen.if}) && (${baseIf})`;
+      }
+      steps.push(installCbindgen);
+    }
+    return steps;
   }
   if (step.builtin === "setup_linker") {
     return translateSetupLinker(baseIf);
@@ -344,7 +444,7 @@ function translateCompositeStep(step: PreBuildStep | PostBuildStep, baseIf?: str
 function translateStep(step: PreBuildStep | PostBuildStep, config: RefineryConfig): Step[] {
   const baseIf = getStepIfCondition(step, config);
   if (step.type === "builtin") {
-    return translateBuiltinStep(step, baseIf);
+    return translateBuiltinStep(step, config, baseIf);
   }
   if (step.type === "composite") {
     return translateCompositeStep(step, baseIf);

@@ -9,6 +9,7 @@ const TRAILING_DASH_RE = /-$/u;
 
 export interface MatrixEntry {
   artifact: string;
+  artifact_type: "bin" | "lib";
   os: string;
   arch: string;
   abi?: string;
@@ -26,6 +27,7 @@ export interface MatrixEntry {
   include_files: string[];
   apt_packages: string[];
   bin_ext: string;
+  headers: boolean;
   linker?: string;
 }
 
@@ -101,9 +103,13 @@ function getDefaultPackages(os: string): string[] {
 function resolveOutputName(
   target: RefineryConfig["targets"][0],
   arch: string,
-  patterns: Map<string, string>,
+  artifacts: Map<string, RefineryConfig["artifacts"][0]>,
 ): string {
-  const pattern = patterns.get(target.for) ?? DEFAULT_OUTPUT_PATTERN;
+  const art = artifacts.get(`${target.for}:${target.type}`);
+  let pattern = DEFAULT_OUTPUT_PATTERN;
+  if (art && art.type === "bin" && art.outputName) {
+    pattern = art.outputName;
+  }
 
   let res = pattern
     .replace("{name}", target.for)
@@ -171,9 +177,9 @@ function buildPackageFlags(packages: string[]): PackageFlags {
 function buildBaseEntry(
   target: RefineryConfig["targets"][0],
   arch: string,
-  patterns: Map<string, string>,
+  artifacts: Map<string, RefineryConfig["artifacts"][0]>,
 ): MatrixEntry {
-  const outputName = resolveOutputName(target, arch, patterns);
+  const outputName = resolveOutputName(target, arch, artifacts);
   const packages = target.packages ?? getDefaultPackages(target.os);
   const triple = getTargetTriple(target.os, arch, target.abi);
   const flags = buildPackageFlags(packages);
@@ -186,12 +192,17 @@ function buildBaseEntry(
 
   let binExt = "";
 
-  if (target.os === "windows") {
+  if (target.os === "windows" && target.type === "bin") {
     binExt = ".exe";
   }
 
+  const art = artifacts.get(`${target.for}:${target.type}`);
+  const headersEnabled =
+    (target.type === "lib" && target.headers) || (art?.type === "lib" && art.headers);
+
   const entry: MatrixEntry = {
     artifact: target.for,
+    artifact_type: target.type,
     os: target.os,
     arch,
     runs_on: getRunsOn(target.os, arch),
@@ -204,6 +215,7 @@ function buildBaseEntry(
     include_files: target.includeInPackage ?? [],
     apt_packages: getAptPackages(target.os, triple, packages),
     bin_ext: binExt,
+    headers: headersEnabled,
   };
 
   if (target.abi) {
@@ -221,19 +233,17 @@ function buildBaseEntry(
 
 function buildMatrix(config: RefineryConfig): MatrixEntry[] {
   const entries: MatrixEntry[] = [];
-  const map = new Map<string, string>();
+  const artifactMap = new Map<string, RefineryConfig["artifacts"][0]>();
 
   if (config.lang === "rust") {
     for (const a of config.artifacts ?? []) {
-      if (a.type === "bin" && a.outputName) {
-        map.set(a.name, a.outputName);
-      }
+      artifactMap.set(`${a.name}:${a.type}`, a);
     }
   }
 
   for (const t of config.targets ?? []) {
     for (const arch of t.arch) {
-      entries.push(buildBaseEntry(t, arch, map));
+      entries.push(buildBaseEntry(t, arch, artifactMap));
     }
   }
 

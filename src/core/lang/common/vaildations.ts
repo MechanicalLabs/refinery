@@ -143,13 +143,17 @@ export function validateConfigReferences(
       });
     }
 
-    const artifact = data.artifacts.find((a) => a.name === target.for);
-    if (artifact && artifact.type !== target.type) {
-      ctx.addIssue({
-        code: "custom",
-        message: `Target '${target.id}' type '${target.type}' does not match artifact '${target.for}' type '${artifact.type}'`,
-        path: ["targets", index, "type"],
-      });
+    const matchingArtifacts = data.artifacts.filter((a) => a.name === target.for);
+    const [firstMatch] = matchingArtifacts;
+    if (firstMatch) {
+      const match = matchingArtifacts.find((a) => a.type === target.type);
+      if (!match) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Target '${target.id}' type '${target.type}' does not match artifact '${target.for}' type '${firstMatch.type}'`,
+          path: ["targets", index, "type"],
+        });
+      }
     }
   }
 }
@@ -160,13 +164,22 @@ export function validateConfigReferences(
 export function validateOutputNameCollisions(
   data: {
     artifacts: { name: string; type: string; outputName?: string | undefined }[];
-    targets: { id: string; for: string; os: string; arch: string[]; abi?: string | undefined }[];
+    targets: {
+      id: string;
+      for: string;
+      type?: string;
+      os: string;
+      arch: string[];
+      abi?: string | undefined;
+    }[];
   },
   ctx: z.RefinementCtx,
 ): void {
   for (const [artIndex, artifact] of data.artifacts.entries()) {
     if (artifact.type === "bin") {
-      const targets = data.targets.filter((t) => t.for === artifact.name);
+      const targets = data.targets.filter(
+        (t) => t.for === artifact.name && (t.type === undefined || t.type === "bin"),
+      );
       if (!checkArtifactCollisions(artifact, artIndex, targets, ctx)) {
         return;
       }

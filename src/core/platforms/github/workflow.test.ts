@@ -330,3 +330,96 @@ describe("GitHub workflow hooks", () => {
     expect(releaseSteps?.some((s) => s.name === "Publish Metrics")).toBe(true);
   });
 });
+
+describe("GitHub workflow library and WASM support", () => {
+  const libConfig = {
+    version: 1,
+    lang: "rust",
+    platform: "github",
+    artifacts: [
+      { type: "lib", name: "my_lib", headers: true },
+      { type: "lib", name: "wasm_lib", headers: false },
+    ],
+    targets: [
+      {
+        id: "linux-lib",
+        for: "my_lib",
+        type: "lib",
+        os: "linux",
+        arch: ["x86_64"],
+        headers: true,
+      },
+      {
+        id: "wasm-target",
+        for: "wasm_lib",
+        type: "lib",
+        os: "linux",
+        arch: ["wasm32"],
+        headers: false,
+      },
+    ],
+  } as unknown as RefineryConfig;
+
+  it("should generate correct matrix entries for libraries and WebAssembly", () => {
+    const yaml = buildWorkflowYaml(libConfig);
+    const parsed = load(yaml) as {
+      jobs: {
+        build: {
+          strategy: {
+            matrix: {
+              include: {
+                artifact: string;
+                artifact_type: string;
+                headers: boolean;
+                target_triple: string;
+              }[];
+            };
+          };
+        };
+      };
+    };
+    const matrix = parsed.jobs.build.strategy.matrix.include;
+
+    expect(matrix).toHaveLength(2);
+    const linuxLib = matrix.find((e) => e.artifact === "my_lib");
+    expect(linuxLib?.artifact_type).toBe("lib");
+    expect(linuxLib?.headers).toBe(true);
+    expect(linuxLib?.target_triple).toBe("x86_64-unknown-linux-gnu");
+
+    const wasmLib = matrix.find((e) => e.artifact === "wasm_lib");
+    expect(wasmLib?.artifact_type).toBe("lib");
+    expect(wasmLib?.headers).toBe(false);
+    expect(wasmLib?.target_triple).toBe("wasm32-unknown-unknown");
+  });
+
+  it("should inject cbindgen installation step", () => {
+    const yaml = buildWorkflowYaml(libConfig);
+    const parsed = load(yaml) as {
+      jobs: {
+        build: {
+          steps: { name: string; uses?: string; with?: { tool?: string } }[];
+        };
+      };
+    };
+    const { steps } = parsed.jobs.build;
+    const cbindgenStep = steps.find((s) => s.name === "Install cbindgen");
+    expect(cbindgenStep).toBeDefined();
+    expect(cbindgenStep?.uses).toBe("taiki-e/install-action@v2");
+    expect(cbindgenStep?.with?.tool).toBe("cbindgen");
+  });
+
+  it("should generate library packaging and export steps", () => {
+    const yaml = buildWorkflowYaml(libConfig);
+    const parsed = load(yaml) as {
+      jobs: {
+        build: {
+          steps: { name: string; if?: string }[];
+        };
+      };
+    };
+    const { steps } = parsed.jobs.build;
+    expect(steps.some((s) => s.name === "Prepare Library")).toBe(true);
+    expect(steps.some((s) => s.name === "Export Library")).toBe(true);
+    expect(steps.some((s) => s.name === "Package Library")).toBe(true);
+  });
+});

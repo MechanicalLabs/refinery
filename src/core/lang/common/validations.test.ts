@@ -82,6 +82,24 @@ describe("validateConfigReferences", () => {
       "type 'bin' does not match artifact 'app' type 'lib'",
     );
   });
+
+  it("should allow duplicate artifact names of different types if target type matches", () => {
+    const ctx = createMockCtx();
+    validateConfigReferences(
+      {
+        artifacts: [
+          { name: "app", type: "bin" },
+          { name: "app", type: "lib" },
+        ],
+        targets: [
+          { id: "t1", for: "app", type: "bin" },
+          { id: "t2", for: "app", type: "lib" },
+        ],
+      },
+      ctx,
+    );
+    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues).toHaveLength(0);
+  });
 });
 
 describe("validateOutputNameCollisions", () => {
@@ -106,6 +124,24 @@ describe("validateOutputNameCollisions", () => {
       {
         artifacts: [{ name: "app", type: "bin", outputName: "{name}-{os}-{arch}" }],
         targets: [{ id: "t1", for: "app", os: "linux", arch: ["x86_64", "arm64"] }],
+      },
+      ctx,
+    );
+    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues).toHaveLength(0);
+  });
+
+  it("should not collide output names if targets have different types", () => {
+    const ctx = createMockCtx();
+    validateOutputNameCollisions(
+      {
+        artifacts: [
+          { name: "app", type: "bin", outputName: "static-name" },
+          { name: "app", type: "lib" },
+        ],
+        targets: [
+          { id: "t1", for: "app", type: "bin", os: "linux", arch: ["x86_64"] },
+          { id: "t2", for: "app", type: "lib", os: "linux", arch: ["x86_64"] },
+        ],
       },
       ctx,
     );

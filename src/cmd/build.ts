@@ -1,6 +1,7 @@
 // biome-ignore-all lint/nursery/noTernary: fine for simple ternaries
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential builds are intentional
 // biome-ignore-all lint/complexity/useLiteralKeys: bracket notation needed for TS index sig
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: build command contains sequential execution logic that is cohesive
 import pc from "picocolors";
 import { type AsyncResult, Err, Ok } from "ripthrow";
 import { loadManifest } from "../core/io/manifest";
@@ -132,6 +133,77 @@ function getBuildEntries(config: RefineryConfig, targetId?: string): MatrixEntry
   );
 }
 
+async function ensureCbindgen(): AsyncResult<void, Error> {
+  const check = await sh`which cbindgen`;
+  if (check.ok && check.value.exitCode === 0) {
+    return Ok();
+  }
+
+  logger.info("cbindgen not found in PATH. Attempting to install...");
+
+  const checkBinstall = await sh`which cargo-binstall`;
+  if (checkBinstall.ok && checkBinstall.value.exitCode === 0) {
+    logger.info("Using cargo-binstall to install cbindgen...");
+    const installBinstall = await sh`cargo binstall -y cbindgen`;
+    if (installBinstall.ok && installBinstall.value.exitCode === 0) {
+      logger.done("cbindgen installed successfully.");
+      return Ok();
+    }
+  }
+
+  logger.info("Using cargo install to compile/install cbindgen (this may take a few minutes)...");
+  const installCargo = await sh`cargo install cbindgen`;
+  if (installCargo.ok && installCargo.value.exitCode === 0) {
+    logger.done("cbindgen installed successfully.");
+    return Ok();
+  }
+
+  return Err(
+    new Error("Failed to install cbindgen. Please install it manually: `cargo install cbindgen`"),
+  );
+}
+
+async function generateHeaders(entry: MatrixEntry): AsyncResult<void, Error> {
+  const ensureResult = await ensureCbindgen();
+  if (!ensureResult.ok) {
+    return ensureResult;
+  }
+
+  logger.info(`Generating headers for ${pc.cyan(entry.artifact_bin)}`);
+  const mkdirResult = await sh`mkdir -p target/release`;
+  if (!mkdirResult.ok) {
+    return Err(
+      new Error(`Failed to create target/release directory: ${mkdirResult.error.message}`),
+    );
+  }
+
+  const hasConfig = await Bun.file("cbindgen.toml").exists();
+  const genResult = hasConfig
+    ? await sh`cbindgen --config cbindgen.toml --crate ${entry.artifact_bin} --output target/release/${entry.output_name}.h`
+    : await sh`cbindgen --crate ${entry.artifact_bin} --output target/release/${entry.output_name}.h`;
+
+  if (!genResult.ok) {
+    return Err(new Error(`Failed to generate header file: ${genResult.error.message}`));
+  }
+  if (genResult.value.exitCode !== 0) {
+    return Err(new Error(`Failed to generate header file: ${genResult.value.stderr}`));
+  }
+
+  const cpResult =
+    await sh`cp target/release/${entry.output_name}.h target/release/${entry.artifact_bin}.h`;
+  if (!cpResult.ok) {
+    return Err(
+      new Error(`Failed to copy header file: ${cpResult.ok ? "" : cpResult.error.message}`),
+    );
+  }
+  if (cpResult.value.exitCode !== 0) {
+    return Err(new Error(`Failed to copy header file: ${cpResult.value.stderr}`));
+  }
+
+  logger.done(`  Generated ${pc.cyan(`target/release/${entry.output_name}.h`)}`);
+  return Ok();
+}
+
 async function buildSingleEntry(
   entry: MatrixEntry,
   config: RefineryConfig,
@@ -166,6 +238,13 @@ async function buildSingleEntry(
   }
 
   logger.done(`  Built ${pc.cyan(triple)}`);
+
+  if (entry.headers) {
+    const headerResult = await generateHeaders(entry);
+    if (!headerResult.ok) {
+      return headerResult;
+    }
+  }
 
   if (config.post_build) {
     const perTargetPostSteps = config.post_build.filter((s) => s.targets !== "once");

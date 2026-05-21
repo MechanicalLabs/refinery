@@ -6,7 +6,7 @@ import type { Arch } from "../../core/types/arch";
 import { getCompatibleAbis, isAbiRequired } from "../../core/types/compatibility";
 import { Os } from "../../core/types/os";
 
-export const TOTAL_ARCHS = 4;
+export const TOTAL_ARCHS = 5;
 export type CoverageMap = Map<string, Set<string>>;
 
 /**
