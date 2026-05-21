@@ -187,7 +187,7 @@ describe("GitHub workflow packaging", () => {
     expect(steps.some((s) => s.name === "Install cargo-binstall")).toBe(false);
     expect(steps.some((s) => s.name === "Install cargo-deb")).toBe(true);
     expect(steps.some((s) => s.name === "Build .deb package")).toBe(true);
-    expect(steps.some((s) => s.name === "Install cargo-rpm")).toBe(true);
+    expect(steps.some((s) => s.name === "Install cargo-generate-rpm")).toBe(true);
     expect(steps.some((s) => s.name === "Build .rpm package")).toBe(true);
     expect(steps.some((s) => s.name === "Install cargo-wix")).toBe(true);
     expect(steps.some((s) => s.name === "Build .msi package")).toBe(true);

@@ -15,13 +15,7 @@ jobs:
           - tool: cargo-deb
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-          - tool: cargo-rpm
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
           - tool: cargo-deb
-            os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
-          - tool: cargo-rpm
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
     runs-on: ${{ matrix.os }}

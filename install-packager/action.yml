@@ -1,8 +1,8 @@
 name: "Install Packager"
-description: "Downloads and installs a pre-compiled packaging tool (cargo-deb, cargo-rpm, cargo-wix) from Refinery releases"
+description: "Downloads and installs a pre-compiled packaging tool (cargo-deb, cargo-wix) from Refinery releases"
 inputs:
   tool:
-    description: "Tool name (cargo-deb, cargo-rpm, cargo-wix)"
+    description: "Tool name (cargo-deb, cargo-wix)"
     required: true
   version:
     description: "Release version (defaults to latest)"
