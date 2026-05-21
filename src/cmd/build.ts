@@ -93,7 +93,7 @@ async function execSteps(
   currentEntry?: MatrixEntry,
 ): AsyncResult<void, Error> {
   for (const step of steps) {
-    if (shouldExecuteStep(step, config, currentEntry)) {
+    if (shouldExecuteStep(step, config, currentEntry) && step.type === "composite") {
       const result = await resolveComposite(step.action, step.with);
       if (!result.ok) {
         return result;

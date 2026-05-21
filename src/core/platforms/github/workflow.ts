@@ -22,6 +22,9 @@ const defaultPublish: PublishStep[] = [
 ];
 
 function translatePublishBuiltinStep(step: PublishStep): Step[] {
+  if (step.type !== "builtin") {
+    return [];
+  }
   const steps: Step[] = [];
   if (step.builtin === "download_artifact") {
     steps.push({
@@ -57,6 +60,9 @@ function translatePublishBuiltinStep(step: PublishStep): Step[] {
 }
 
 function translatePublishCompositeStep(step: PublishStep): Step[] {
+  if (step.type !== "composite") {
+    return [];
+  }
   const s: Step = {
     name: step.name ?? `Execute ${step.action}`,
     uses: `./.github/actions/${step.action}`,
@@ -155,7 +161,8 @@ function buildJobs(config: RefineryConfig): Record<string, unknown> {
 
   const releaseJob = buildReleaseJob(config);
   if (releaseJob) {
-    jobs.release = releaseJob;
+    // biome-ignore lint/complexity/useLiteralKeys: GHA
+    jobs["release"] = releaseJob;
   }
 
   return jobs;

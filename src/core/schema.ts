@@ -1,21 +1,18 @@
 import { z } from "zod";
 import { RustConfigSchema } from "./lang/rust/schema";
 
-const TargetsUnion = z
-  .union([z.literal("once"), z.literal("all"), z.array(z.string())])
-  .optional()
-  .default("once");
+const TargetsUnion = z.union([z.literal("once"), z.literal("all"), z.array(z.string())]).optional();
 
 const CompositeStepSchema = z
   .object({
     type: z.literal("composite"),
     name: z.string().optional(),
     action: z.string(),
-    with: z.record(z.any()).optional(),
+    with: z.record(z.string(), z.any()).optional(),
     secrets: z.array(z.string()).optional(),
-    permissions: z.record(z.string()).optional(),
+    permissions: z.record(z.string(), z.string()).optional(),
     targets: TargetsUnion,
-    enabled: z.boolean().optional().default(true),
+    enabled: z.boolean().optional(),
   })
   .strict();
 
@@ -24,9 +21,9 @@ const PreBuildBuiltinSchema = z
     type: z.literal("builtin"),
     name: z.string().optional(),
     builtin: z.enum(["checkout", "setup_toolchain", "setup_linker"]),
-    with: z.record(z.any()).optional(),
+    with: z.record(z.string(), z.any()).optional(),
     targets: TargetsUnion,
-    enabled: z.boolean().optional().default(true),
+    enabled: z.boolean().optional(),
   })
   .strict();
 
@@ -40,9 +37,9 @@ const PostBuildBuiltinSchema = z
     type: z.literal("builtin"),
     name: z.string().optional(),
     builtin: z.enum(["package", "upload_artifact"]),
-    with: z.record(z.any()).optional(),
+    with: z.record(z.string(), z.any()).optional(),
     targets: TargetsUnion,
-    enabled: z.boolean().optional().default(true),
+    enabled: z.boolean().optional(),
   })
   .strict();
 
@@ -56,9 +53,9 @@ const PublishBuiltinSchema = z
     type: z.literal("builtin"),
     name: z.string().optional(),
     builtin: z.enum(["download_artifact", "github_release"]),
-    with: z.record(z.any()).optional(),
+    with: z.record(z.string(), z.any()).optional(),
     targets: TargetsUnion,
-    enabled: z.boolean().optional().default(true),
+    enabled: z.boolean().optional(),
   })
   .strict();
 
@@ -76,10 +73,10 @@ const RefineryConfigSchema = z.discriminatedUnion("lang", [
     platform: z.enum(["github"]),
     lang: z.literal("rust"),
     // biome-ignore lint/style/useNamingConvention: TOML key
-    pre_build: z.array(PreBuildStepSchema).optional().default([]),
+    pre_build: z.array(PreBuildStepSchema).optional(),
     // biome-ignore lint/style/useNamingConvention: TOML key
-    post_build: z.array(PostBuildStepSchema).optional().default([]),
-    publish: z.array(PublishStepSchema).optional().default([]),
+    post_build: z.array(PostBuildStepSchema).optional(),
+    publish: z.array(PublishStepSchema).optional(),
   }).strict(),
 ]);
 

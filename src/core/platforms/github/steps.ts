@@ -179,11 +179,32 @@ function getMatchingTriples(
   return matchingTriples;
 }
 
+function getTargetsCondition(
+  targets: "once" | "all" | string[],
+  config: RefineryConfig,
+  entries: ReturnType<typeof buildMatrix>,
+): string | undefined {
+  let result: string | undefined;
+  if (targets === "once") {
+    const firstTriple = entries[0]?.target_triple;
+    if (firstTriple) {
+      result = `matrix.target_triple == '${firstTriple}'`;
+    }
+  } else if (Array.isArray(targets)) {
+    const triples = getMatchingTriples(targets, config, entries);
+    if (triples.length > 0) {
+      result = triples.map((t) => `matrix.target_triple == '${t}'`).join(" || ");
+    }
+  }
+  return result;
+}
+
 function getStepIfCondition(
   step: PreBuildStep | PostBuildStep,
   config: RefineryConfig,
 ): string | undefined {
-  if (step.targets === "all") {
+  const targets = step.targets ?? "once";
+  if (targets === "all") {
     return;
   }
 
@@ -192,20 +213,7 @@ function getStepIfCondition(
     return;
   }
 
-  if (step.targets === "once") {
-    const firstTriple = entries[0]?.target_triple;
-    if (firstTriple) {
-      return `matrix.target_triple == '${firstTriple}'`;
-    }
-    return;
-  }
-
-  if (Array.isArray(step.targets)) {
-    const triples = getMatchingTriples(step.targets, config, entries);
-    if (triples.length > 0) {
-      return triples.map((t) => `matrix.target_triple == '${t}'`).join(" || ");
-    }
-  }
+  return getTargetsCondition(targets, config, entries);
 }
 
 function translateCheckout(baseIf?: string): Step {
