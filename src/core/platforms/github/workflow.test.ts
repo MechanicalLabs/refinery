@@ -2,6 +2,7 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
 // biome-ignore-all lint/style/useNamingConvention: YAML schema
 // biome-ignore-all lint/complexity/useLiteralKeys: test assertions with bracket notation
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: test suite contains all GHA tests
 import { describe, expect, it } from "bun:test";
 import { load } from "js-yaml";
 import type { RefineryConfig } from "../../schema";
@@ -227,5 +228,105 @@ describe("GitHub workflow packaging", () => {
     };
     const uploadStep = parsed.jobs.build.steps.find((s) => s.name === "Upload Artifact");
     expect(uploadStep?.with?.path).toBe("_packages/");
+  });
+});
+
+describe("GitHub workflow hooks", () => {
+  const hooksConfig: RefineryConfig = {
+    version: 1,
+    platform: "github",
+    lang: "rust",
+    artifacts: [
+      {
+        type: "bin",
+        name: "test-app",
+      },
+    ],
+    targets: [
+      {
+        id: "linux-target",
+        for: "test-app",
+        os: "linux",
+        arch: ["x86_64"],
+        abi: "gnu",
+        type: "bin",
+      },
+      {
+        id: "win-target",
+        for: "test-app",
+        os: "windows",
+        arch: ["x86_64"],
+        abi: "msvc",
+        type: "bin",
+      },
+    ],
+    pre_build: [
+      {
+        type: "builtin",
+        builtin: "checkout",
+      },
+      {
+        type: "composite",
+        name: "Custom Linter",
+        action: "run-linter",
+        targets: ["linux-target"],
+      },
+    ],
+    post_build: [
+      {
+        type: "builtin",
+        builtin: "package",
+      },
+      {
+        type: "composite",
+        name: "Post Notify",
+        action: "slack-notify",
+        targets: "once",
+      },
+    ],
+    publish: [
+      {
+        type: "builtin",
+        builtin: "download_artifact",
+      },
+      {
+        type: "composite",
+        name: "Publish Metrics",
+        action: "metrics",
+      },
+    ],
+  };
+
+  it("should generate dynamic workflow with custom pre_build, post_build, and publish hooks", () => {
+    const yaml = buildWorkflowYaml(hooksConfig);
+    const parsed = load(yaml) as {
+      jobs: {
+        build: {
+          steps: { name: string; if?: string; uses?: string }[];
+        };
+        release?: {
+          steps: { name: string; uses?: string }[];
+        };
+      };
+    };
+
+    const buildSteps = parsed.jobs.build.steps;
+    const releaseSteps = parsed.jobs.release?.steps;
+
+    expect(buildSteps.some((s) => s.name === "Checkout")).toBe(true);
+
+    const linterStep = buildSteps.find((s) => s.name === "Custom Linter");
+    expect(linterStep).toBeDefined();
+    expect(linterStep?.uses).toBe("./.github/actions/run-linter");
+    expect(linterStep?.if).toBe("matrix.target_triple == 'x86_64-unknown-linux-gnu'");
+
+    const notifyStep = buildSteps.find((s) => s.name === "Post Notify");
+    expect(notifyStep).toBeDefined();
+    expect(notifyStep?.uses).toBe("./.github/actions/slack-notify");
+    expect(notifyStep?.if).toBe("matrix.target_triple == 'x86_64-unknown-linux-gnu'");
+
+    expect(releaseSteps).toBeDefined();
+    expect(releaseSteps?.some((s) => s.name === "Download Artifacts")).toBe(true);
+    expect(releaseSteps?.some((s) => s.name === "Publish Metrics")).toBe(true);
   });
 });
