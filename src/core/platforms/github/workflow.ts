@@ -101,6 +101,13 @@ function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | unde
   }
 
   const steps: Step[] = [];
+  if (activeSteps.some((s) => s.type === "composite")) {
+    steps.push({
+      name: "Checkout repository",
+      uses: Actions.checkout,
+    });
+  }
+
   for (const step of activeSteps) {
     steps.push(...translatePublishStep(step));
   }
