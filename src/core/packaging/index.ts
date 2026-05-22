@@ -9,4 +9,4 @@ export const PACKAGERS: Record<string, Packager> = {
   msi: msiPackager,
 };
 
-export type { Packager, PackageStep } from "./types";
+export type { Packager } from "./types";

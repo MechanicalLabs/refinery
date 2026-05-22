@@ -2,7 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: GHA env vars and config keys
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: GHA steps generator needs to contain all translation logic
 
-import { PACKAGERS, type PackageStep } from "../../packaging";
+import { PACKAGERS } from "../../packaging";
 import type { PostBuildStep, PreBuildStep, RefineryConfig } from "../../schema";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../../strategy/types";
 import { Actions } from "./constants";
@@ -100,26 +100,44 @@ function translatePackage(baseIf?: string): Step[] {
   for (const pkg of ["deb", "rpm", "msi"] as const) {
     const packager = PACKAGERS[pkg];
     if (packager) {
-      steps.push(
-        ...packager.setupSteps.map((ps) => ({
-          name: ps.name,
-          uses: ps.uses,
-          run: ps.run,
-          shell: ps.shell,
-          with: ps.with,
-          if: ps.ifCondition,
-        })),
-      );
-      steps.push(
-        ...packager.buildSteps.map((ps) => ({
-          name: ps.name,
-          uses: ps.uses,
-          run: ps.run,
-          shell: ps.shell,
-          with: ps.with,
-          if: ps.ifCondition,
-        })),
-      );
+      for (const ps of packager.setupSteps) {
+        const s: Step = { name: ps.name };
+        if (ps.uses) {
+          s.uses = ps.uses;
+        }
+        if (ps.run) {
+          s.run = ps.run;
+        }
+        if (ps.shell) {
+          s.shell = ps.shell;
+        }
+        if (ps.with) {
+          s.with = ps.with;
+        }
+        if (ps.ifCondition) {
+          s.if = ps.ifCondition;
+        }
+        steps.push(s);
+      }
+      for (const ps of packager.buildSteps) {
+        const s: Step = { name: ps.name };
+        if (ps.uses) {
+          s.uses = ps.uses;
+        }
+        if (ps.run) {
+          s.run = ps.run;
+        }
+        if (ps.shell) {
+          s.shell = ps.shell;
+        }
+        if (ps.with) {
+          s.with = ps.with;
+        }
+        if (ps.ifCondition) {
+          s.if = ps.ifCondition;
+        }
+        steps.push(s);
+      }
     }
   }
 
@@ -142,17 +160,24 @@ function translatePackage(baseIf?: string): Step[] {
 function translateAbstractStep(
   ctx: StrategyContext,
   step: AbstractStep,
-  config: RefineryConfig,
+  _config: RefineryConfig,
   baseIf?: string,
 ): Step[] {
   if (step.type === "shell") {
     const s: Step = {
       name: step.name,
       run: step.run,
-      shell: step.shell,
-      env: step.env,
-      if: step.if,
     };
+    if (step.shell) {
+      s.shell = step.shell;
+    }
+    if (step.env) {
+      s.env = step.env;
+    }
+    if (step.if) {
+      s.if = step.if;
+    }
+
     if (baseIf) {
       s.if = s.if ? `(${s.if}) && (${baseIf})` : baseIf;
     }
@@ -161,12 +186,22 @@ function translateAbstractStep(
 
   if (step.type === "action" || (step as any).type === "composite") {
     const s: Step = {
-      name: step.name ?? ((step as any).action ? `Execute ${(step as any).action}` : undefined),
+      name:
+        step.type === "action"
+          ? step.name
+          : ((step as any).name ?? ((step as any).action ? `Execute ${(step as any).action}` : "")),
       uses: step.type === "action" ? step.uses : `./.github/actions/${(step as any).action}`,
-      with: step.with as Record<string, string | boolean>,
-      env: (step as any).env,
-      if: step.if,
     };
+
+    if (step.with) {
+      s.with = step.with as Record<string, string | boolean | number>;
+    }
+    if ((step as any).env) {
+      s.env = (step as any).env;
+    }
+    if ((step as any).if) {
+      s.if = (step as any).if;
+    }
 
     if ((step as any).secrets && Array.isArray((step as any).secrets)) {
       s.env = s.env || {};
@@ -183,21 +218,23 @@ function translateAbstractStep(
 
   if (step.type === "builtin") {
     switch (step.builtin) {
-      case "checkout":
-        return [
-          {
-            name: "Checkout",
-            uses: Actions.checkout,
-            if: baseIf,
-          },
-        ];
+      case "checkout": {
+        const s: Step = {
+          name: "Checkout",
+          uses: Actions.checkout,
+        };
+        if (baseIf) {
+          s.if = baseIf;
+        }
+        return [s];
+      }
       case "setup_toolchain": {
         const langSetupSteps = ctx.lang.getSetupSteps(ctx, GHA_TARGET);
         const steps: Step[] = [];
         for (const s of langSetupSteps) {
           // If it's the main toolchain setup, we might want to preserve some defaults
           if (s.type === "builtin" && s.builtin === "setup_toolchain") {
-            steps.push({
+            const stepObj: Step = {
               name: s.name ?? step.name ?? "Setup Toolchain",
               uses: Actions.setupRust, // Hardcoded for now
               with: {
@@ -206,10 +243,13 @@ function translateAbstractStep(
                 ...(s.with ?? {}),
                 ...(step.with ?? {}),
               },
-              if: baseIf,
-            });
+            };
+            if (baseIf) {
+              stepObj.if = baseIf;
+            }
+            steps.push(stepObj);
           } else {
-            steps.push(...translateAbstractStep(ctx, s, config, baseIf));
+            steps.push(...translateAbstractStep(ctx, s, _config, baseIf));
           }
         }
         return steps;
@@ -218,19 +258,23 @@ function translateAbstractStep(
         return translateSetupLinker(baseIf);
       case "package":
         return translatePackage(baseIf);
-      case "upload_artifact":
-        return [
-          {
-            name: "Upload Artifact",
-            uses: Actions.uploadArtifact,
-            with: {
-              name: "${{ matrix.output_name }}",
-              path: "_packages/",
-              ...(step.with ?? {}),
-            },
-            if: baseIf,
+      case "upload_artifact": {
+        const s: Step = {
+          name: "Upload Artifact",
+          uses: Actions.uploadArtifact,
+          with: {
+            name: "${{ matrix.output_name }}",
+            path: "_packages/",
+            ...(step.with ?? {}),
           },
-        ];
+        };
+        if (baseIf) {
+          s.if = baseIf;
+        }
+        return [s];
+      }
+      default:
+        return [];
     }
   }
 
@@ -310,7 +354,9 @@ export function buildSteps(ctx: StrategyContext): Step[] {
   }
 
   for (const step of preBuildSteps) {
-    if (step.enabled === false) continue;
+    if (step.enabled === false) {
+      continue;
+    }
 
     const baseIf = getStepIfCondition(step, config);
     if (step.type === "builtin") {
@@ -319,7 +365,7 @@ export function buildSteps(ctx: StrategyContext): Step[] {
       // If it's a builtin in the manifest, we use our local translation.
       steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
     } else {
-      steps.push(...translateAbstractStep(ctx, step as AbstractStep, config, baseIf));
+      steps.push(...translateAbstractStep(ctx, step as unknown as AbstractStep, config, baseIf));
     }
   }
 
@@ -335,7 +381,9 @@ export function buildSteps(ctx: StrategyContext): Step[] {
   }
 
   for (const step of postBuildSteps) {
-    if (step.enabled === false) continue;
+    if (step.enabled === false) {
+      continue;
+    }
 
     const baseIf = getStepIfCondition(step, config);
     if (step.type === "builtin") {
@@ -355,7 +403,7 @@ export function buildSteps(ctx: StrategyContext): Step[] {
       }
       steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
     } else {
-      steps.push(...translateAbstractStep(ctx, step as AbstractStep, config, baseIf));
+      steps.push(...translateAbstractStep(ctx, step as unknown as AbstractStep, config, baseIf));
     }
   }
 

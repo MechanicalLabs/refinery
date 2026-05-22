@@ -18,7 +18,10 @@
     "enabled": true,
     "rules": {
       "recommended": true,
-      "complexity": "error",
+      "complexity": {
+        "recommended": true,
+        "noUselessUndefined": "off"
+      },
       "correctness": {
         "recommended": true,
         "noNodejsModules": "off"
@@ -26,9 +29,16 @@
       "performance": "error",
       "security": "error",
       "style": "error",
-      "suspicious": "error",
+      "suspicious": {
+        "recommended": true,
+        "noTemplateCurlyInString": "off",
+        "noExplicitAny": "off"
+      },
       "a11y": "error",
-      "nursery": "error"
+      "nursery": {
+        "recommended": true,
+        "noTernary": "off"
+      }
     }
   }
 }

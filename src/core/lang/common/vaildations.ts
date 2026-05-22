@@ -61,7 +61,6 @@ function checkArtifactCollisions(
   return true;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: High complexity is inherent to the strict target platform validation rules.
 export function validateBinaryTarget(
   data: {
     os: (typeof Os)[keyof typeof Os];

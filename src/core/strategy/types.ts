@@ -49,14 +49,14 @@ export interface TargetMetadata {
   artifactType: "bin" | "lib";
   os: string;
   arch: string;
-  abi?: string;
+  abi?: string | undefined;
   triple: string;
   outputName: string;
   packages: string[];
   includeFiles: string[];
   binExt: string;
   headers: boolean;
-  linker?: string;
+  linker?: string | undefined;
   artifactBin: string; // The binary name (e.g. underscored)
   aptPackages: string[];
 }

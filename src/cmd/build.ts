@@ -2,7 +2,6 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential builds are intentional
 // biome-ignore-all lint/complexity/useLiteralKeys: bracket notation needed for TS index sig
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: build command contains sequential execution logic that is cohesive
-import pc from "picocolors";
 import { type AsyncResult, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
@@ -24,14 +23,14 @@ function entryToMetadata(entry: MatrixEntry): TargetMetadata {
     artifactType: entry.artifact_type,
     os: entry.os,
     arch: entry.arch,
-    abi: entry.abi,
+    abi: entry.abi ?? undefined,
     triple: entry.target_triple,
     outputName: entry.output_name,
     packages: entry.packages,
     includeFiles: entry.include_files,
     binExt: entry.bin_ext,
     headers: entry.headers,
-    linker: entry.linker,
+    linker: entry.linker ?? undefined,
     artifactBin: entry.artifact_bin,
     aptPackages: entry.apt_packages,
   };
@@ -57,8 +56,8 @@ async function installSystemDeps(triple: string, packages: string[]): AsyncResul
   return Ok();
 }
 
-function buildEnvForEntry(entry: MatrixEntry, config: RefineryConfig): Record<string, string> {
-  const linkerCfg = getLinkerConfig(entry.target_triple);
+function buildEnvForEntry(target: TargetMetadata, config: RefineryConfig): Record<string, string> {
+  const linkerCfg = getLinkerConfig(target.triple);
   const env: Record<string, string> = { ...(linkerCfg?.linkerEnv ?? {}) };
 
   if (config.lang === "rust" && config.release) {
@@ -155,36 +154,6 @@ function getBuildEntries(config: RefineryConfig, targetId?: string): MatrixEntry
   );
 }
 
-async function ensureCbindgen(): AsyncResult<void, Error> {
-  const check = await sh`which cbindgen`;
-  if (check.ok && check.value.exitCode === 0) {
-    return Ok();
-  }
-
-  logger.info("cbindgen not found in PATH. Attempting to install...");
-
-  const checkBinstall = await sh`which cargo-binstall`;
-  if (checkBinstall.ok && checkBinstall.value.exitCode === 0) {
-    logger.info("Using cargo-binstall to install cbindgen...");
-    const installBinstall = await sh`cargo binstall -y cbindgen`;
-    if (installBinstall.ok && installBinstall.value.exitCode === 0) {
-      logger.done("cbindgen installed successfully.");
-      return Ok();
-    }
-  }
-
-  logger.info("Using cargo install to compile/install cbindgen (this may take a few minutes)...");
-  const installCargo = await sh`cargo install cbindgen`;
-  if (installCargo.ok && installCargo.value.exitCode === 0) {
-    logger.done("cbindgen installed successfully.");
-    return Ok();
-  }
-
-  return Err(
-    new Error("Failed to install cbindgen. Please install it manually: `cargo install cbindgen`"),
-  );
-}
-
 async function executeAbstractStep(
   step: AbstractStep,
   ctx: StrategyContext,
@@ -193,11 +162,15 @@ async function executeAbstractStep(
   if (step.type === "shell") {
     // Basic condition filtering for local build
     if (step.if) {
-      if (step.if.includes("matrix.artifact_type == 'bin'") && target.artifactType !== "bin")
+      if (step.if.includes("matrix.artifact_type == 'bin'") && target.artifactType !== "bin") {
         return Ok();
-      if (step.if.includes("matrix.artifact_type == 'lib'") && target.artifactType !== "lib")
+      }
+      if (step.if.includes("matrix.artifact_type == 'lib'") && target.artifactType !== "lib") {
         return Ok();
-      if (step.if.includes("matrix.headers == true") && !target.headers) return Ok();
+      }
+      if (step.if.includes("matrix.headers == true") && !target.headers) {
+        return Ok();
+      }
     }
 
     const env = buildEnvForEntry(target, ctx.config);
@@ -233,29 +206,6 @@ async function executeAbstractStep(
   return Ok();
 }
 
-function buildEnvForEntry(target: TargetMetadata, config: RefineryConfig): Record<string, string> {
-  const linkerCfg = getLinkerConfig(target.triple);
-  const env: Record<string, string> = { ...(linkerCfg?.linkerEnv ?? {}) };
-
-  if (config.lang === "rust" && config.release) {
-    const r = config.release;
-    if (r.strip) {
-      env["CARGO_PROFILE_RELEASE_STRIP"] = "symbols";
-    }
-    if (r.lto) {
-      env["CARGO_PROFILE_RELEASE_LTO"] = "true";
-    }
-    if (r.codegenUnits && r.codegenUnits > 0) {
-      env["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] = String(r.codegenUnits);
-    }
-    if (r.panic === "abort") {
-      env["CARGO_PROFILE_RELEASE_PANIC"] = "abort";
-    }
-  }
-
-  return env;
-}
-
 async function buildSingleEntry(
   entry: MatrixEntry,
   ctx: StrategyContext,
@@ -273,19 +223,25 @@ async function buildSingleEntry(
   const setupSteps = ctx.lang.getSetupSteps(ctx, target);
   for (const s of setupSteps) {
     const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) return res;
+    if (!res.ok) {
+      return res;
+    }
   }
 
   const buildSteps = ctx.lang.getBuildSteps(ctx, target);
   for (const s of buildSteps) {
     const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) return res;
+    if (!res.ok) {
+      return res;
+    }
   }
 
   const exportSteps = ctx.lang.getExportSteps(ctx, target);
   for (const s of exportSteps) {
     const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) return res;
+    if (!res.ok) {
+      return res;
+    }
   }
 
   if (ctx.config.post_build) {
@@ -307,7 +263,9 @@ async function runBuild(targetId?: string): AsyncResult<void, Error> {
 
   const config = manifestResult.value;
   const langResult = LanguageRegistry.get(config.lang);
-  if (!langResult.ok) return langResult;
+  if (!langResult.ok) {
+    return langResult;
+  }
 
   const entries = getBuildEntries(config, targetId);
   if (entries.length === 0) {

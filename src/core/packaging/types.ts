@@ -1,4 +1,4 @@
-export interface PackageStep {
+interface PackageStep {
   name: string;
   run?: string;
   uses?: string;

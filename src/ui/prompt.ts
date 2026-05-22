@@ -85,7 +85,6 @@ export const step = {
           const option = {
             value: opt.value,
             label: opt.label,
-            // biome-ignore lint/nursery/noTernary: This is more concise and readable for optional hints
             ...(opt.hint ? { hint: opt.hint } : {}),
           };
           return option as { value: T; label: string; hint?: string };
@@ -110,7 +109,6 @@ export const step = {
           options: options.map((opt) => ({
             ...opt,
             hint: opt.hint ?? undefined,
-            // biome-ignore lint/suspicious/noExplicitAny: Clack types are difficult to map with generic T
           })) as any,
           required,
         }),

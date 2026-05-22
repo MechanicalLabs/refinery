@@ -18,7 +18,7 @@ export const rustStrategy: LanguageStrategy = {
     // Rust-specific initialization logic
     return Promise.resolve(Ok());
   },
-  getSetupSteps: (_ctx, target): AbstractStep[] => {
+  getSetupSteps: (_ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
     const steps: AbstractStep[] = [];
 
     steps.push({
@@ -50,7 +50,7 @@ export const rustStrategy: LanguageStrategy = {
 
     return steps;
   },
-  getBuildSteps: (_ctx, target): AbstractStep[] => {
+  getBuildSteps: (_ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
     const steps: AbstractStep[] = [];
 
     steps.push({
@@ -62,7 +62,7 @@ export const rustStrategy: LanguageStrategy = {
 
     return steps;
   },
-  getExportSteps: (_ctx, target): AbstractStep[] => {
+  getExportSteps: (_ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
     const steps: AbstractStep[] = [];
 
     // Preparation
