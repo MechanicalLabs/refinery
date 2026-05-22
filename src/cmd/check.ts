@@ -10,14 +10,19 @@ import type { Cmd } from "./types";
 /**
  * Validates the refinery manifest and the local environment.
  */
-async function runCheck(): AsyncResult<void, Error> {
-  logger.info("Checking refinery configuration and environment...");
+async function runCheck(options: { manifestOnly?: boolean } = {}): AsyncResult<void, Error> {
+  const { manifestOnly = false } = options;
+  logger.info("Checking refinery configuration...");
 
   return buildAsync(loadManifest())
     .note("Loading refinery.toml")
     .mapErr((e) => e as Error)
     .andThen(async (config) => {
       logger.done("  ✓ refinery.toml is valid");
+
+      if (manifestOnly) {
+        return Ok();
+      }
 
       logger.info("\nChecking toolchain:");
       if (config.lang === "rust") {
@@ -64,12 +69,14 @@ async function runCheck(): AsyncResult<void, Error> {
 const checkCmd: Cmd = {
   id: "check",
   description: "Validate refinery.toml and the local build environment",
-  options: [],
-  action: (): AsyncResult<void, Error> => {
+  options: [{ flags: "--manifest-only", description: "Validate only the refinery.toml file" }],
+  action: (options: Record<string, unknown>): AsyncResult<void, Error> => {
     printBranding();
-    return buildAsync(runCheck())
+    // biome-ignore lint/complexity/useLiteralKeys: TypeScript index signature requires bracket notation
+    const manifestOnly = Boolean(options["manifestOnly"]);
+    return buildAsync(runCheck({ manifestOnly }))
       .tap(() => {
-        logger.done("\nEnvironment is ready for building.");
+        logger.done(manifestOnly ? "\nManifest is valid." : "\nEnvironment is ready for building.");
       })
       .mapErr((e) => e as Error).result;
   },

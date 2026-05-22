@@ -1,10 +1,13 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ensureImageBuilt, runInIsolatedDocker } from "./harness";
 
+const DOCKER_BUILD_TIMEOUT = 120_000;
+const E2E_FLOW_TIMEOUT = 30_000;
+
 describe("CLI E2E Lifecycle", () => {
   beforeAll(() => {
     ensureImageBuilt();
-  }, 120_000);
+  }, DOCKER_BUILD_TIMEOUT);
 
   it("fails when manifest is missing", () => {
     const { output, exitCode } = runInIsolatedDocker(["check"]);
@@ -28,39 +31,43 @@ describe("CLI E2E Lifecycle", () => {
       "echo 'arch = [\"x86_64\"]' >> refinery.toml",
       "echo 'type = \"bin\"' >> refinery.toml",
     ];
-    const { output, exitCode } = runInIsolatedDocker(["check"], setup);
+    const { output } = runInIsolatedDocker(["check"], setup);
 
     expect(output).toContain("refinery.toml is valid");
     expect(output).toContain("Checking toolchain");
   });
 
-  it("executes build dry-run", () => {
-    const setup = [
-      "touch Cargo.toml",
-      "echo '[package]' > Cargo.toml",
-      "echo 'name = \"test-pkg\"' >> Cargo.toml",
-      "echo 'version = \"0.1.0\"' >> Cargo.toml",
-      "mkdir src && touch src/main.rs",
-      "echo 'version = 1' > refinery.toml",
-      "echo 'lang = \"rust\"' >> refinery.toml",
-      "echo 'platform = \"github\"' >> refinery.toml",
-      "echo 'toolchain = \"stable\"' >> refinery.toml",
-      "echo '[[artifacts]]' >> refinery.toml",
-      "echo 'type = \"bin\"' >> refinery.toml",
-      "echo 'name = \"test-pkg\"' >> refinery.toml",
-      "echo '[[targets]]' >> refinery.toml",
-      "echo 'id = \"linux\"' >> refinery.toml",
-      "echo 'for = \"test-pkg\"' >> refinery.toml",
-      "echo 'os = \"linux\"' >> refinery.toml",
-      "echo 'arch = [\"x86_64\"]' >> refinery.toml",
-      "echo 'type = \"bin\"' >> refinery.toml",
-    ];
+  it(
+    "executes build dry-run",
+    () => {
+      const setup = [
+        "touch Cargo.toml",
+        "echo '[package]' > Cargo.toml",
+        "echo 'name = \"test-pkg\"' >> Cargo.toml",
+        "echo 'version = \"0.1.0\"' >> Cargo.toml",
+        "mkdir src && touch src/main.rs",
+        "echo 'version = 1' > refinery.toml",
+        "echo 'lang = \"rust\"' >> refinery.toml",
+        "echo 'platform = \"github\"' >> refinery.toml",
+        "echo 'toolchain = \"stable\"' >> refinery.toml",
+        "echo '[[artifacts]]' >> refinery.toml",
+        "echo 'type = \"bin\"' >> refinery.toml",
+        "echo 'name = \"test-pkg\"' >> refinery.toml",
+        "echo '[[targets]]' >> refinery.toml",
+        "echo 'id = \"linux\"' >> refinery.toml",
+        "echo 'for = \"test-pkg\"' >> refinery.toml",
+        "echo 'os = \"linux\"' >> refinery.toml",
+        "echo 'arch = [\"x86_64\"]' >> refinery.toml",
+        "echo 'type = \"bin\"' >> refinery.toml",
+      ];
 
-    const { output, exitCode } = runInIsolatedDocker(["build", "--dry-run"], setup);
+      const { output, exitCode } = runInIsolatedDocker(["build", "--dry-run"], setup);
 
-    expect(output).toContain("Dry-run mode enabled");
-    expect(output).toContain("cargo build --release --target x86_64-unknown-linux-gnu");
-    expect(output).toContain("Dry-run complete");
-    expect(exitCode).toBe(0);
-  }, 30_000);
+      expect(output).toContain("Dry-run mode enabled");
+      expect(output).toContain("cargo build --release --target x86_64-unknown-linux-gnu");
+      expect(output).toContain("Dry-run complete");
+      expect(exitCode).toBe(0);
+    },
+    E2E_FLOW_TIMEOUT,
+  );
 });
