@@ -49,11 +49,12 @@ async function validateArtifacts(config: {
   for (const artifact of config.artifacts ?? []) {
     if (!cargoNames.has(artifact.name)) {
       return Err(
-        new Error(
-          `Artifact '${artifact.name}' not found in Cargo.toml. ` +
+        Errors.artifactValidationFailed({
+          reason:
+            `Artifact '${artifact.name}' not found in Cargo.toml. ` +
             `Expected one of: ${[...cargoNames].join(", ") || "(none)"}. ` +
             "Run `refinery init` to regenerate artifact definitions from Cargo.toml.",
-        ),
+        }),
       );
     }
   }

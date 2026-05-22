@@ -10,6 +10,7 @@ import type { PostBuildStep, PreBuildStep, PublishStep, RefineryConfig } from ".
 import { LanguageRegistry } from "../core/strategy/registry";
 import { TargetRegistry } from "../core/strategy/target-registry";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../core/strategy/types";
+import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import { resolveComposite } from "../utils/composite";
@@ -38,7 +39,7 @@ function entryToMetadata(entry: MatrixEntry): TargetMetadata {
 async function addTarget(triple: string): AsyncResult<void, Error> {
   const result = await sh`rustup target add ${triple}`;
   if (!result.ok) {
-    return Err(new Error(`Failed to add target ${triple}: ${result.error.message}`));
+    return Err(Errors.targetAdditionFailed({ triple, reason: result.error.message }));
   }
   return Ok();
 }
@@ -55,7 +56,7 @@ async function installSystemDeps(target: TargetMetadata): AsyncResult<void, Erro
   }
   const result = await sh`sudo apt-get update && sudo apt-get install -y ${apt.join(" ")}`;
   if (!result.ok) {
-    return Err(new Error(`Failed to install system deps: ${result.error.message}`));
+    return Err(Errors.systemDepsInstallFailed({ reason: result.error.message }));
   }
   return Ok();
 }
@@ -185,7 +186,7 @@ async function executeAbstractStep(
     const result = await shWithEnv(env)`${step.run}`;
     if (!result.ok || result.value.exitCode !== 0) {
       const msg = result.ok ? result.value.stderr : result.error.message;
-      return Err(new Error(`Step '${step.name}' failed: ${msg}`));
+      return Err(Errors.stepExecutionFailed({ step: step.name, reason: msg }));
     }
     return Ok();
   }
@@ -273,8 +274,10 @@ async function runBuild(targetId?: string): AsyncResult<void, Error> {
 
   const entries = getBuildEntries(config, targetId);
   if (entries.length === 0) {
-    const msg = targetId ? `Target '${targetId}' not found` : "No build targets defined";
-    return Err(new Error(msg));
+    if (targetId) {
+      return Err(Errors.targetNotFound({ targetId }));
+    }
+    return Err(Errors.noTargetsDefined());
   }
 
   const ctx: StrategyContext = {

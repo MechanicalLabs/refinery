@@ -1,6 +1,7 @@
 import { load } from "js-yaml";
-import { type AsyncResult, Err, Ok } from "ripthrow";
+import { type AsyncResult, Err, Ok, safe } from "ripthrow";
 import { exists, readFile } from "../core/io/fs";
+import { Errors } from "../errors";
 import { logger } from "../ui/log";
 import { sh } from "./shell";
 
@@ -49,9 +50,10 @@ async function runSteps(
       const result = await sh`bash -c ${runCmd}`;
       if (!result.ok) {
         return Err(
-          new Error(
-            `Failed to execute step in composite action '${actionName}': ${result.error.message}`,
-          ),
+          Errors.stepExecutionFailed({
+            step: `Action step in ${actionName}`,
+            reason: result.error.message,
+          }),
         );
       }
     }
@@ -69,28 +71,30 @@ export async function resolveComposite(
 ): AsyncResult<void, Error> {
   const actionPath = await findActionPath(actionName);
   if (!actionPath) {
-    return Err(new Error(`Composite action '${actionName}' not found in .github/actions/`));
+    return Err(Errors.compositeActionNotFound({ name: actionName }));
   }
 
   const readRes = await readFile(actionPath);
   if (!readRes.ok) {
     return Err(
-      new Error(`Failed to read composite action at ${actionPath}: ${readRes.error.message}`),
+      Errors.compositeActionReadFailed({ path: actionPath, reason: readRes.error.message }),
     );
   }
 
-  let parsed: ActionYaml;
-  try {
-    parsed = load(readRes.value) as ActionYaml;
-  } catch (e) {
+  const parseResult = safe(() => load(readRes.value) as ActionYaml);
+  if (!parseResult.ok) {
     return Err(
-      new Error(`Failed to parse composite action YAML at ${actionPath}: ${(e as Error).message}`),
+      Errors.compositeActionParseFailed({
+        path: actionPath,
+        reason: (parseResult.error as Error).message,
+      }),
     );
   }
 
+  const parsed = parseResult.value;
   const { runs } = parsed;
   if (!runs || runs.using !== "composite" || !runs.steps) {
-    return Err(new Error(`Action at ${actionPath} is not a valid composite action`));
+    return Err(Errors.invalidCompositeAction({ path: actionPath }));
   }
 
   logger.info(`Executing composite action: ${actionName}`);
