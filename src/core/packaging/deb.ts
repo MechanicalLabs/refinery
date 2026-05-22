@@ -1,5 +1,3 @@
-// biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
-
 import { Actions } from "../platforms/github/constants";
 import type { Packager } from "./types";
 

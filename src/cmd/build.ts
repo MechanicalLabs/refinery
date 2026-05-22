@@ -1,4 +1,3 @@
-// biome-ignore-all lint/nursery/noTernary: fine for simple ternaries
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential builds are intentional
 // biome-ignore-all lint/complexity/useLiteralKeys: bracket notation needed for TS index sig
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: build command contains sequential execution logic that is cohesive

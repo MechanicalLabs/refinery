@@ -1,4 +1,3 @@
-// biome-ignore-all lint/suspicious/noExplicitAny: Bun Shell template tags require specific internal types for values
 import { $ } from "bun";
 import { type AsyncResult, safeAsync } from "ripthrow";
 

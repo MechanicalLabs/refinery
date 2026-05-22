@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
-// biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
 import { dump } from "js-yaml";
 import type { PublishStep, RefineryConfig } from "../../schema";
 import type { StrategyContext } from "../../strategy/types";

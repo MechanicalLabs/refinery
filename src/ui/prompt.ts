@@ -56,12 +56,11 @@ export const step = {
     validate?: (v: string) => string | undefined,
     placeholder = "",
   ): (() => Promise<StepResult<string>>) => {
-    // @ts-expect-error: Not all code paths return a value
-    // This is intentional to allow for validation errors to be returned
     const validator: PromptValidator = (value: string | undefined): string | undefined => {
       if (validate) {
         return validate(value ?? "");
       }
+      return undefined;
     };
 
     return (): Promise<StepResult<string>> =>
@@ -126,11 +125,11 @@ export const step = {
 export function toUiValidator(
   validate: (v: string) => Result<void, string>,
 ): (v: string) => string | undefined {
-  // @ts-expect-error: undefined return required by Clack UI contract
   return (v: string): string | undefined => {
     const res = validate(v);
     if (!res.ok) {
       return res.error;
     }
+    return undefined;
   };
 }

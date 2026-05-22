@@ -1,4 +1,3 @@
-// biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA
 // biome-ignore-all lint/style/useNamingConvention: GHA env vars and config keys
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: GHA steps generator needs to contain all translation logic
 

@@ -1,5 +1,4 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: it's a test
-// biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
 // biome-ignore-all lint/style/useNamingConvention: YAML schema
 // biome-ignore-all lint/complexity/useLiteralKeys: test assertions with bracket notation
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: test suite contains all GHA tests

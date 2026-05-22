@@ -1,5 +1,3 @@
-// biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
-
 import type { Packager } from "./types";
 
 const C = "${{ matrix.has_rpm }}";
