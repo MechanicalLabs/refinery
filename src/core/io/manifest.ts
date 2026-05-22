@@ -9,19 +9,24 @@ const FILENAME = "refinery.toml";
 
 export function loadManifest(): AsyncResult<RefineryConfig, AppError | Error> {
   return buildAsync(exists(FILENAME))
+    .note("Checking for refinery.toml existence")
+    .mapErr((e): AppError | Error => e as any)
     .andThen(() => readFile(FILENAME))
+    .note("Reading refinery.toml content")
+    .mapErr((e): AppError | Error => e as any)
     .andThen((content) =>
       safe(() => {
         const data = parse(content);
         return RefineryConfigSchema.parse(data);
       }),
     )
+    .note("Parsing and validating refinery.toml")
     .mapErr((err): AppError | Error => {
       // biome-ignore lint/security/noSecrets: false positive on error kind string
       if (kindOf(err) === "ioFileNotFound") {
         return Errors.manifestNotFound();
       }
-      return err;
+      return err as any;
     }).result;
 }
 

@@ -15,19 +15,20 @@ export function writeFile(path: string, content: string): AsyncResult<number, Er
 }
 
 export function mkdir(path: string): AsyncResult<void, Error> {
-  return buildAsync(safeAsync(nodeMkdirAsync(path, { recursive: true }))).map((): void => undefined)
-    .result;
+  return buildAsync(safeAsync(nodeMkdirAsync(path, { recursive: true })))
+    .map((): void => undefined)
+    .mapErr((e): Error => e).result;
 }
 
 export function exists(path: string): AsyncResult<void, Error> {
-  return buildAsync(safeAsync(Bun.file(resolve(path)).exists())).andThen(
-    (fileExists: boolean): AsyncResult<void, Error> => {
+  return buildAsync(safeAsync(Bun.file(resolve(path)).exists()))
+    .andThen((fileExists: boolean): AsyncResult<void, Error> => {
       if (fileExists) {
         return Promise.resolve(Ok());
       }
       return Promise.resolve(Err(Errors.ioFileNotFound({ path })));
-    },
-  ).result;
+    })
+    .mapErr((e): Error => e).result;
 }
 
 export function existsSync(path: string): boolean {

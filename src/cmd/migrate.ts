@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type AsyncResult, AsyncResultBuilder, buildAsync, Ok } from "ripthrow";
+import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
@@ -48,14 +48,13 @@ async function validateArtifacts(config: {
 
   for (const artifact of config.artifacts ?? []) {
     if (!cargoNames.has(artifact.name)) {
-      return AsyncResultBuilder.err<void, Error>(
-        Errors.artifactValidationFailed({
-          reason:
-            `Artifact '${artifact.name}' not found in Cargo.toml. ` +
-            `Expected one of: ${[...cargoNames].join(", ") || "(none)"}. ` +
-            "Run `refinery init` to regenerate artifact definitions from Cargo.toml.",
-        }),
-      ).result;
+      const err = Errors.artifactValidationFailed({
+        reason:
+          `Artifact '${artifact.name}' not found in Cargo.toml. ` +
+          `Expected one of: ${[...cargoNames].join(", ") || "(none)"}. ` +
+          "Run `refinery init` to regenerate artifact definitions from Cargo.toml.",
+      });
+      return Promise.resolve(Err(err));
     }
   }
 
@@ -80,9 +79,8 @@ async function validateTargets(config: RefineryConfig): AsyncResult<void, Error>
 
   for (const result of results) {
     if (!result.exists) {
-      return AsyncResultBuilder.err<void, Error>(
-        Errors.missingTargetFile({ file: result.file, targetId: result.targetId }),
-      ).result;
+      const err = Errors.missingTargetFile({ file: result.file, targetId: result.targetId });
+      return Promise.resolve(Err(err));
     }
   }
 
@@ -96,42 +94,54 @@ async function runMigrate(): AsyncResult<void, Error> {
   }
   const config = manifestRes.value;
 
-  const artifactRes = await validateArtifacts(config);
-  if (!artifactRes.ok) {
-    return artifactRes;
-  }
+  return buildAsync(Promise.resolve(Ok(config)))
+    .note("Loading refinery.toml")
+    .mapErr((e): Error => e as Error)
+    .andThen(async (config: RefineryConfig) => {
+      const artifactRes = await validateArtifacts(config);
+      if (!artifactRes.ok) {
+        return artifactRes;
+      }
 
-  const targetRes = await validateTargets(config);
-  if (!targetRes.ok) {
-    return targetRes;
-  }
+      const targetRes = await validateTargets(config);
+      if (!targetRes.ok) {
+        return targetRes;
+      }
 
-  const platformResult = PlatformRegistry.get(config.platform);
-  if (!platformResult.ok) {
-    return platformResult;
-  }
+      return Ok(config);
+    })
+    .note("Validating configuration against local project")
+    .mapErr((e): Error => e as Error)
+    .andThen((config: RefineryConfig) => {
+      const platformResult = PlatformRegistry.get(config.platform);
+      if (!platformResult.ok) {
+        return platformResult;
+      }
 
-  const langResult = LanguageRegistry.get(config.lang);
-  if (!langResult.ok) {
-    return langResult;
-  }
+      const langResult = LanguageRegistry.get(config.lang);
+      if (!langResult.ok) {
+        return langResult;
+      }
 
-  const strategy = platformResult.value;
-  const lang = langResult.value;
-  const projectName = path.basename(process.cwd());
+      const strategy = platformResult.value;
+      const lang = langResult.value;
+      const projectName = path.basename(process.cwd());
 
-  const ctx: StrategyContext = {
-    projectName,
-    config,
-    lang,
-    cwd: process.cwd(),
-    sys: {
-      sh,
-      fs: { exists: () => Promise.resolve(Ok()), readFile, writeFile, mkdir },
-    },
-  };
+      const ctx: StrategyContext = {
+        projectName,
+        config,
+        lang,
+        cwd: process.cwd(),
+        sys: {
+          sh,
+          fs: { exists: () => Promise.resolve(Ok()), readFile, writeFile, mkdir },
+        },
+      };
 
-  return strategy.migrate(ctx);
+      return strategy.migrate(ctx);
+    })
+    .note("Generating CI platform configuration")
+    .mapErr((e): Error => e as Error).result;
 }
 
 const migrateCmd: Cmd = {
@@ -141,9 +151,11 @@ const migrateCmd: Cmd = {
   action: (): AsyncResult<void, Error> => {
     printBranding();
 
-    return buildAsync(runMigrate()).tap(() => {
-      logger.done("CI configuration generated successfully.");
-    }).result;
+    return buildAsync(runMigrate())
+      .tap(() => {
+        logger.done("CI configuration generated successfully.");
+      })
+      .mapErr((e): Error => e as Error).result;
   },
 };
 

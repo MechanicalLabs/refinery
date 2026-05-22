@@ -62,9 +62,10 @@ function createInitialManifest(ctx: InitContext): AsyncResult<InitContextWithMan
     (manifest as Record<string, unknown>)["release"] = DEFAULT_RUST_RELEASE;
   }
 
-  return buildAsync(saveManifest(manifest)).map(
-    (): InitContextWithManifest => ({ ...ctx, manifest }),
-  ).result;
+  return buildAsync(saveManifest(manifest))
+    .note("Saving initial refinery.toml")
+    .mapErr((e): Error => e as Error)
+    .map((): InitContextWithManifest => ({ ...ctx, manifest })).result;
 }
 
 /**
@@ -91,11 +92,16 @@ function runStrategyHooks(
     task(
       "Initializing project...",
       async (): AsyncResult<void, Error> =>
-        buildAsync(ctx.lang.onInit(strategyCtx)).andThen(
-          (): AsyncResult<void, Error> => ctx.plat.onInit(strategyCtx),
-        ).result,
+        buildAsync(ctx.lang.onInit(strategyCtx))
+          .note(`Running ${ctx.lang.name} initialization`)
+          .mapErr((e): Error => e as Error)
+          .andThen((): AsyncResult<void, Error> => ctx.plat.onInit(strategyCtx))
+          .note(`Running ${ctx.plat.name} initialization`)
+          .mapErr((e): Error => e as Error).result,
     ),
   )
+    .note("Executing initialization hooks")
+    .mapErr((e): Error => e as Error)
     .map((): InitContextWithManifest => ctx)
     .mapErr((): Error => Errors.strategyInitFailed({ strategy: "project" })).result;
 }
@@ -107,8 +113,14 @@ export function executeInitPipeline(answers: ProjectAnswers): AsyncResult<void, 
   const projectName = path.basename(process.cwd());
 
   return buildAsync(resolveStrategies(answers))
+    .note("Resolving project strategies")
+    .mapErr((e): Error => e as Error)
     .andThen(createInitialManifest)
+    .note("Preparing project manifest")
+    .mapErr((e): Error => e as Error)
     .andThen(runStrategyHooks)
+    .note("Configuring project environment")
+    .mapErr((e): Error => e as Error)
     .tap((): void => {
       PromptGroup.outro(`Project ${pc.red(projectName)} initialized.`);
     })

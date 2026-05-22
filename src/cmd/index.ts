@@ -51,12 +51,19 @@ for (const cmd of CommandRegistry.all()) {
 
       // Handle ripthrow Result/AsyncResult
       if (result && typeof result === "object" && "ok" in result && !result.ok) {
-        logger.fail(result.error);
+        const err = result.error as any;
+        logger.fail(err);
 
-        // biome-ignore lint/complexity/useLiteralKeys: Error properties
-        if ((result.error as any)["help"]) {
-          // biome-ignore lint/complexity/useLiteralKeys: Error properties
-          logger.info((result.error as any)["help"]());
+        // Print contextual notes if available (Report type)
+        if (err.notes && Array.isArray(err.notes) && err.notes.length > 0) {
+          for (const note of err.notes) {
+            logger.info(`  └ ${note}`);
+          }
+        }
+
+        // Print help text if available
+        if (err.help) {
+          logger.info(`\nHelp: ${err.help()}`);
         }
 
         process.exit(1);

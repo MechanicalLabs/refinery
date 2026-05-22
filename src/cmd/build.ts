@@ -217,47 +217,63 @@ async function buildSingleEntry(
 ): AsyncResult<void, Error> {
   const target = entryToMetadata(entry);
 
-  if (ctx.config.pre_build) {
-    const perTargetPreSteps = ctx.config.pre_build.filter((s) => s.targets !== "once");
-    const preRes = await execSteps(perTargetPreSteps, ctx.config, entry);
-    if (!preRes.ok) {
-      return preRes;
-    }
-  }
-
-  const setupSteps = ctx.lang.getSetupSteps(ctx, target);
-  for (const s of setupSteps) {
-    const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) {
-      return res;
-    }
-  }
-
-  const buildSteps = ctx.lang.getBuildSteps(ctx, target);
-  for (const s of buildSteps) {
-    const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) {
-      return res;
-    }
-  }
-
-  const exportSteps = ctx.lang.getExportSteps(ctx, target);
-  for (const s of exportSteps) {
-    const res = await executeAbstractStep(s, ctx, target);
-    if (!res.ok) {
-      return res;
-    }
-  }
-
-  if (ctx.config.post_build) {
-    const perTargetPostSteps = ctx.config.post_build.filter((s) => s.targets !== "once");
-    const postRes = await execSteps(perTargetPostSteps, ctx.config, entry);
-    if (!postRes.ok) {
-      return postRes;
-    }
-  }
-
-  return Ok();
+  return buildAsync(Promise.resolve(Ok()))
+    .note(`Preparing build for ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      if (ctx.config.pre_build) {
+        const perTargetPreSteps = ctx.config.pre_build.filter((s) => s.targets !== "once");
+        return await execSteps(perTargetPreSteps, ctx.config, entry);
+      }
+      return Ok();
+    })
+    .note(`Running pre-build steps for ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      const setupSteps = ctx.lang.getSetupSteps(ctx, target);
+      for (const s of setupSteps) {
+        const res = await executeAbstractStep(s, ctx, target);
+        if (!res.ok) {
+          return res;
+        }
+      }
+      return Ok();
+    })
+    .note(`Setting up environment for ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      const buildSteps = ctx.lang.getBuildSteps(ctx, target);
+      for (const s of buildSteps) {
+        const res = await executeAbstractStep(s, ctx, target);
+        if (!res.ok) {
+          return res;
+        }
+      }
+      return Ok();
+    })
+    .note(`Compiling ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      const exportSteps = ctx.lang.getExportSteps(ctx, target);
+      for (const s of exportSteps) {
+        const res = await executeAbstractStep(s, ctx, target);
+        if (!res.ok) {
+          return res;
+        }
+      }
+      return Ok();
+    })
+    .note(`Exporting artifacts for ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      if (ctx.config.post_build) {
+        const perTargetPostSteps = ctx.config.post_build.filter((s) => s.targets !== "once");
+        return await execSteps(perTargetPostSteps, ctx.config, entry);
+      }
+      return Ok();
+    })
+    .note(`Running post-build steps for ${entry.target_triple}`)
+    .mapErr((e): Error => e as Error).result;
 }
 
 async function runBuild(targetId?: string): AsyncResult<void, Error> {
@@ -291,31 +307,31 @@ async function runBuild(targetId?: string): AsyncResult<void, Error> {
     },
   };
 
-  const preResult = await runPhaseSteps(config.pre_build, config, true);
-  if (!preResult.ok) {
-    return preResult;
-  }
-
-  for (const entry of entries) {
-    const buildRes = await buildSingleEntry(entry, ctx);
-    if (!buildRes.ok) {
-      return buildRes;
-    }
-  }
-
-  const postResult = await runPhaseSteps(config.post_build, config, true);
-  if (!postResult.ok) {
-    return postResult;
-  }
-
-  if (config.publish) {
-    const publishResult = await execSteps(config.publish, config);
-    if (!publishResult.ok) {
-      return publishResult;
-    }
-  }
-
-  return Ok();
+  return buildAsync(runPhaseSteps(config.pre_build, config, true))
+    .note("Running global pre-build steps")
+    .mapErr((e): Error => e as Error)
+    .andThen(async () => {
+      for (const entry of entries) {
+        const buildRes = await buildSingleEntry(entry, ctx);
+        if (!buildRes.ok) {
+          return buildRes;
+        }
+      }
+      return Ok();
+    })
+    .note("Executing target build sequence")
+    .mapErr((e): Error => e as Error)
+    .andThen(() => runPhaseSteps(config.post_build, config, true))
+    .note("Running global post-build steps")
+    .mapErr((e): Error => e as Error)
+    .andThen(() => {
+      if (config.publish) {
+        return execSteps(config.publish, config);
+      }
+      return Ok();
+    })
+    .note("Executing publish steps")
+    .mapErr((e): Error => e as Error).result;
 }
 
 const buildCmd: Cmd = {
@@ -326,9 +342,11 @@ const buildCmd: Cmd = {
     printBranding();
     const targetId = options["target"] as string | undefined;
 
-    return buildAsync(runBuild(targetId)).tap(() => {
-      logger.done("Build complete.");
-    }).result;
+    return buildAsync(runBuild(targetId))
+      .tap(() => {
+        logger.done("Build complete.");
+      })
+      .mapErr((e): Error => e as Error).result;
   },
 };
 
