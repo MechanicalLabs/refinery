@@ -44,17 +44,12 @@ const initCmd: Cmd = {
   id: "init",
   description: "Initialize project",
   options: [{ flags: "-f, --force", description: "Overwrite existing refinery.toml" }],
-  action: (options: Record<string, unknown>): void => {
+  action: (options: Record<string, unknown>): AsyncResult<void, Error> => {
     printBranding();
     // biome-ignore lint/complexity/useLiteralKeys: TypeScript noPropertyAccessFromIndexSignature requires bracket notation
     const force = Boolean(options["force"]);
 
-    runInit(force).then((result) => {
-      if (!result.ok) {
-        logger.fail(result.error);
-        process.exit(1);
-      }
-    });
+    return runInit(force);
   },
 };
 

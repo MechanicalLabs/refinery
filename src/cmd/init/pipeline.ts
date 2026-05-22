@@ -1,6 +1,6 @@
 import path from "node:path";
 import pc from "picocolors";
-import { type AsyncResult, buildAsync, Ok, type Result, ResultBuilder } from "ripthrow";
+import { type AsyncResult, buildAsync, ResultBuilder } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../../core/io/fs";
 import { saveManifest } from "../../core/io/manifest";
 import { DEFAULT_RUST_RELEASE } from "../../core/lang/rust/schema";
@@ -62,7 +62,7 @@ function createInitialManifest(ctx: InitContext): AsyncResult<InitContextWithMan
     (manifest as Record<string, unknown>)["release"] = DEFAULT_RUST_RELEASE;
   }
 
-  return buildAsync<number, Error>(saveManifest(manifest)).map(
+  return buildAsync(saveManifest(manifest)).map(
     (): InitContextWithManifest => ({ ...ctx, manifest }),
   ).result;
 }
@@ -112,5 +112,5 @@ export function executeInitPipeline(answers: ProjectAnswers): AsyncResult<void, 
     .tap((): void => {
       PromptGroup.outro(`Project ${pc.red(projectName)} initialized.`);
     })
-    .andThen((): Result<void, Error> => Ok()).result;
+    .map((): void => undefined).result;
 }

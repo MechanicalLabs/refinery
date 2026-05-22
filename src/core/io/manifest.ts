@@ -1,4 +1,4 @@
-import { type AsyncResult, AsyncResultBuilder, buildAsync, kindOf, safe } from "ripthrow";
+import { type AsyncResult, buildAsync, kindOf, Ok, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
 import type { AppError } from "../../errors";
 import { Errors } from "../../errors";
@@ -26,7 +26,7 @@ export function loadManifest(): AsyncResult<RefineryConfig, AppError | Error> {
 }
 
 export function saveManifest(config: RefineryConfig): AsyncResult<number, Error> {
-  return AsyncResultBuilder.ok<RefineryConfig, Error>(config)
+  return buildAsync(Promise.resolve(Ok(config)))
     .andThen((validated) => safe(() => RefineryConfigSchema.parse(validated)))
     .mapErr((e): Error => e as Error)
     .map((validated) => stringify(validated as unknown as Record<string, unknown>))

@@ -6,6 +6,7 @@
 import { Command } from "commander";
 import { getMeta } from "../macros.ts" with { type: "macro" };
 import { printBranding } from "../ui";
+import { logger } from "../ui/log";
 import { CommandRegistry } from "./registry";
 
 /**
@@ -37,8 +38,30 @@ for (const cmd of CommandRegistry.all()) {
     }
   }
 
-  sub.action((options) => {
-    cmd.action(options ?? {});
+  sub.action(async (options) => {
+    const actionResult = cmd.action(options ?? {});
+
+    if (
+      actionResult instanceof Promise ||
+      (actionResult !== null &&
+        typeof actionResult === "object" &&
+        "then" in (actionResult as unknown as object))
+    ) {
+      const result = await actionResult;
+
+      // Handle ripthrow Result/AsyncResult
+      if (result && typeof result === "object" && "ok" in result && !result.ok) {
+        logger.fail(result.error);
+
+        // biome-ignore lint/complexity/useLiteralKeys: Error properties
+        if ((result.error as any)["help"]) {
+          // biome-ignore lint/complexity/useLiteralKeys: Error properties
+          logger.info((result.error as any)["help"]());
+        }
+
+        process.exit(1);
+      }
+    }
   });
 }
 

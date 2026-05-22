@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { exists as nodeExists, mkdir as nodeMkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { isErr, isOk } from "ripthrow";
+import { isErr, isOk, safeAsync } from "ripthrow";
 import { loadManifest, saveManifest } from "./manifest";
 
 describe("manifest core io", () => {
@@ -54,11 +54,7 @@ describe("manifest core io", () => {
 
   it("should return error if manifest does not exist", async () => {
     // Ensure a clean state by removing any manifest created by previous tests.
-    try {
-      await rm("refinery.toml");
-    } catch {
-      // Ignore if the file does not exist.
-    }
+    await safeAsync(rm("refinery.toml"));
 
     const loadResult = await loadManifest();
     expect(isErr(loadResult)).toBe(true);

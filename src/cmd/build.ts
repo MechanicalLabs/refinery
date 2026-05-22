@@ -1,7 +1,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential builds are intentional
 // biome-ignore-all lint/complexity/useLiteralKeys: bracket notation needed for TS index sig
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: build command contains sequential execution logic that is cohesive
-import { type AsyncResult, Err, Ok } from "ripthrow";
+import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
 import type { MatrixEntry } from "../core/platforms/github/matrix";
@@ -219,9 +219,9 @@ async function buildSingleEntry(
 
   if (ctx.config.pre_build) {
     const perTargetPreSteps = ctx.config.pre_build.filter((s) => s.targets !== "once");
-    const preResult = await execSteps(perTargetPreSteps, ctx.config, entry);
-    if (!preResult.ok) {
-      return preResult;
+    const preRes = await execSteps(perTargetPreSteps, ctx.config, entry);
+    if (!preRes.ok) {
+      return preRes;
     }
   }
 
@@ -251,9 +251,9 @@ async function buildSingleEntry(
 
   if (ctx.config.post_build) {
     const perTargetPostSteps = ctx.config.post_build.filter((s) => s.targets !== "once");
-    const postResult = await execSteps(perTargetPostSteps, ctx.config, entry);
-    if (!postResult.ok) {
-      return postResult;
+    const postRes = await execSteps(perTargetPostSteps, ctx.config, entry);
+    if (!postRes.ok) {
+      return postRes;
     }
   }
 
@@ -261,12 +261,12 @@ async function buildSingleEntry(
 }
 
 async function runBuild(targetId?: string): AsyncResult<void, Error> {
-  const manifestResult = await loadManifest();
-  if (!manifestResult.ok) {
-    return manifestResult;
+  const manifestRes = await loadManifest();
+  if (!manifestRes.ok) {
+    return manifestRes;
   }
+  const config = manifestRes.value;
 
-  const config = manifestResult.value;
   const langResult = LanguageRegistry.get(config.lang);
   if (!langResult.ok) {
     return langResult;
@@ -322,17 +322,13 @@ const buildCmd: Cmd = {
   id: "build",
   description: "Build targets defined in refinery.toml",
   options: [{ flags: "-t, --target <id>", description: "Build only the specified target ID" }],
-  action: (options: Record<string, unknown>): void => {
+  action: (options: Record<string, unknown>): AsyncResult<void, Error> => {
     printBranding();
     const targetId = options["target"] as string | undefined;
 
-    runBuild(targetId).then((result) => {
-      if (!result.ok) {
-        logger.fail(result.error);
-        process.exit(1);
-      }
+    return buildAsync(runBuild(targetId)).tap(() => {
       logger.done("Build complete.");
-    });
+    }).result;
   },
 };
 

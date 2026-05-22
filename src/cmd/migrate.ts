@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type AsyncResult, Err, Ok } from "ripthrow";
+import { type AsyncResult, AsyncResultBuilder, buildAsync, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
@@ -48,14 +48,14 @@ async function validateArtifacts(config: {
 
   for (const artifact of config.artifacts ?? []) {
     if (!cargoNames.has(artifact.name)) {
-      return Err(
+      return AsyncResultBuilder.err<void, Error>(
         Errors.artifactValidationFailed({
           reason:
             `Artifact '${artifact.name}' not found in Cargo.toml. ` +
             `Expected one of: ${[...cargoNames].join(", ") || "(none)"}. ` +
             "Run `refinery init` to regenerate artifact definitions from Cargo.toml.",
         }),
-      );
+      ).result;
     }
   }
 
@@ -80,7 +80,9 @@ async function validateTargets(config: RefineryConfig): AsyncResult<void, Error>
 
   for (const result of results) {
     if (!result.exists) {
-      return Err(Errors.missingTargetFile({ file: result.file, targetId: result.targetId }));
+      return AsyncResultBuilder.err<void, Error>(
+        Errors.missingTargetFile({ file: result.file, targetId: result.targetId }),
+      ).result;
     }
   }
 
@@ -88,21 +90,20 @@ async function validateTargets(config: RefineryConfig): AsyncResult<void, Error>
 }
 
 async function runMigrate(): AsyncResult<void, Error> {
-  const manifestResult = await loadManifest();
-  if (!manifestResult.ok) {
-    return manifestResult;
+  const manifestRes = await loadManifest();
+  if (!manifestRes.ok) {
+    return manifestRes;
+  }
+  const config = manifestRes.value;
+
+  const artifactRes = await validateArtifacts(config);
+  if (!artifactRes.ok) {
+    return artifactRes;
   }
 
-  const config = manifestResult.value;
-
-  const artifactValidation = await validateArtifacts(config);
-  if (!artifactValidation.ok) {
-    return artifactValidation;
-  }
-
-  const targetValidation = await validateTargets(config);
-  if (!targetValidation.ok) {
-    return targetValidation;
+  const targetRes = await validateTargets(config);
+  if (!targetRes.ok) {
+    return targetRes;
   }
 
   const platformResult = PlatformRegistry.get(config.platform);
@@ -137,17 +138,12 @@ const migrateCmd: Cmd = {
   id: "migrate",
   description: "Sync refinery.toml to CI platform configuration",
   options: [],
-  action: (): void => {
+  action: (): AsyncResult<void, Error> => {
     printBranding();
 
-    runMigrate().then((result) => {
-      if (!result.ok) {
-        logger.fail(result.error);
-        process.exit(1);
-      }
-
+    return buildAsync(runMigrate()).tap(() => {
       logger.done("CI configuration generated successfully.");
-    });
+    }).result;
   },
 };
 
