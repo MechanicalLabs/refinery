@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { isOk, Ok } from "ripthrow";
+import { rustStrategy } from "../../lang/rust/strategy";
 import type { StrategyContext } from "../../strategy/types";
 import { githubStrategy } from "./strategy";
 
@@ -24,6 +25,7 @@ describe("github strategy", () => {
         artifacts: [],
         targets: [],
       } as unknown as StrategyContext["config"],
+      lang: rustStrategy,
       sys: {
         sh: mock() as unknown as StrategyContext["sys"]["sh"],
         fs: {

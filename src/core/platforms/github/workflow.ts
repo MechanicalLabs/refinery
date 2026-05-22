@@ -2,6 +2,7 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: GHA expressions
 import { dump } from "js-yaml";
 import type { PublishStep, RefineryConfig } from "../../schema";
+import type { StrategyContext } from "../../strategy/types";
 import { Actions } from "./constants";
 import { buildMatrix, buildReleaseEnv } from "./matrix";
 import { buildSteps } from "./steps";
@@ -140,9 +141,9 @@ function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | unde
   };
 }
 
-function buildJobs(config: RefineryConfig): Record<string, unknown> {
-  const matrix = buildMatrix(config);
-  const buildEnv = buildReleaseEnv(config) ?? {};
+function buildJobs(ctx: StrategyContext): Record<string, unknown> {
+  const matrix = buildMatrix(ctx.config);
+  const buildEnv = buildReleaseEnv(ctx.config) ?? {};
 
   const jobs: Record<string, unknown> = {
     build: {
@@ -155,11 +156,11 @@ function buildJobs(config: RefineryConfig): Record<string, unknown> {
         "fail-fast": false,
         matrix: { include: matrix },
       },
-      steps: buildSteps(config),
+      steps: buildSteps(ctx),
     },
   };
 
-  const releaseJob = buildReleaseJob(config);
+  const releaseJob = buildReleaseJob(ctx.config);
   if (releaseJob) {
     // biome-ignore lint/complexity/useLiteralKeys: GHA
     jobs["release"] = releaseJob;
@@ -168,14 +169,14 @@ function buildJobs(config: RefineryConfig): Record<string, unknown> {
   return jobs;
 }
 
-export function buildWorkflowYaml(config: RefineryConfig): string {
+export function buildWorkflowYaml(ctx: StrategyContext): string {
   const workflow = {
     name: "Refinery Build",
     on: {
       push: { tags: ["v*"] },
       release: { types: ["created"] },
     },
-    jobs: buildJobs(config),
+    jobs: buildJobs(ctx),
   };
 
   return dump(workflow, { lineWidth: 120, noRefs: true, quotingType: '"' });

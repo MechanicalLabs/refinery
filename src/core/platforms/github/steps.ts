@@ -4,6 +4,7 @@
 
 import { PACKAGERS, type PackageStep } from "../../packaging";
 import type { PostBuildStep, PreBuildStep, RefineryConfig } from "../../schema";
+import type { AbstractStep, StrategyContext, TargetMetadata } from "../../strategy/types";
 import { Actions } from "./constants";
 import { buildMatrix } from "./matrix";
 
@@ -12,10 +13,25 @@ interface Step {
   uses?: string;
   run?: string;
   shell?: string;
-  with?: Record<string, string | boolean>;
+  with?: Record<string, string | boolean | number>;
   env?: Record<string, string>;
   if?: string;
 }
+
+const GHA_TARGET: TargetMetadata = {
+  artifact: "${{ matrix.artifact }}",
+  artifactType: "${{ matrix.artifact_type }}" as "bin" | "lib",
+  os: "${{ matrix.os }}",
+  arch: "${{ matrix.arch }}",
+  triple: "${{ matrix.target_triple }}",
+  outputName: "${{ matrix.output_name }}",
+  artifactBin: "${{ matrix.artifact_bin }}",
+  binExt: "${{ matrix.bin_ext }}",
+  headers: "${{ matrix.headers }}" as unknown as boolean,
+  packages: [],
+  includeFiles: ["${{ join(matrix.include_files, ' ') }}"],
+  aptPackages: [],
+};
 
 const defaultPreBuild: PreBuildStep[] = [
   { type: "builtin", builtin: "checkout", targets: "all" },
@@ -28,8 +44,8 @@ const defaultPostBuild: PostBuildStep[] = [
   { type: "builtin", builtin: "upload_artifact", targets: "all" },
 ];
 
-function buildSystemDependenciesSteps(): Step[] {
-  return [
+function translateSetupLinker(baseIf?: string): Step[] {
+  const steps: Step[] = [
     {
       name: "Setup Linker",
       uses: Actions.setupLinker,
@@ -65,162 +81,160 @@ if ($wixDir -and (Test-Path "$($wixDir.FullName)\\bin\\candle.exe")) {
       },
     },
   ];
+
+  for (const ds of steps) {
+    if (baseIf) {
+      if (ds.if) {
+        ds.if = `(${ds.if}) && (${baseIf})`;
+      } else {
+        ds.if = baseIf;
+      }
+    }
+  }
+  return steps;
 }
 
-function buildCompilationSteps(): Step[] {
-  return [
-    {
-      name: "Build",
-      run: "cargo build --release --target ${{ matrix.target_triple }}",
-      shell: "bash",
-    },
-  ];
-}
-
-function buildPreparationSteps(): Step[] {
-  return [
-    {
-      name: "Prepare Binary",
-      if: "matrix.artifact_type == 'bin'",
-      run: 'SRC="target/${{ matrix.target_triple }}/release/${{ matrix.artifact_bin }}${{ matrix.bin_ext }}"\nDST_ORIG="target/release/${{ matrix.artifact_bin }}${{ matrix.bin_ext }}"\nDST_RENAMED="target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}"\n\nmkdir -p target/release\ncp "$SRC" "$DST_ORIG"\ncp "$SRC" "$DST_RENAMED"',
-      shell: "bash",
-    },
-    {
-      name: "Prepare Library",
-      if: "matrix.artifact_type == 'lib'",
-      run: [
-        'SRCDIR="target/${{ matrix.target_triple }}/release"',
-        'DSTDIR="target/release"',
-        'mkdir -p "$DSTDIR"',
-        "",
-        "copy_lib() {",
-        '  local src_file="$1"',
-        '  local dst_orig_file="$2"',
-        '  local dst_renamed_file="$3"',
-        '  if [ -f "$src_file" ]; then',
-        '    cp "$src_file" "$DSTDIR/$dst_orig_file"',
-        '    cp "$src_file" "$DSTDIR/$dst_renamed_file"',
-        "  fi",
-        "}",
-        "",
-        'NAME="${{ matrix.artifact_bin }}"',
-        'OUT="${{ matrix.output_name }}"',
-        "",
-        'copy_lib "$SRCDIR/lib${NAME}.so" "lib${NAME}.so" "lib${OUT}.so"',
-        'copy_lib "$SRCDIR/lib${NAME}.dylib" "lib${NAME}.dylib" "lib${OUT}.dylib"',
-        'copy_lib "$SRCDIR/lib${NAME}.a" "lib${NAME}.a" "lib${OUT}.a"',
-        'copy_lib "$SRCDIR/${NAME}.dll" "${NAME}.dll" "${OUT}.dll"',
-        'copy_lib "$SRCDIR/${NAME}.lib" "${NAME}.lib" "${OUT}.lib"',
-        'copy_lib "$SRCDIR/lib${NAME}.dll.a" "lib${NAME}.dll.a" "lib${OUT}.dll.a"',
-        'copy_lib "$SRCDIR/${NAME}.wasm" "${NAME}.wasm" "${OUT}.wasm"',
-        "",
-        'if [ "${{ matrix.headers }}" = "true" ]; then',
-        '  if [ -f "cbindgen.toml" ]; then',
-        '    cbindgen --config cbindgen.toml --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
-        "  else",
-        '    cbindgen --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
-        "  fi",
-        '  cp "$DSTDIR/${OUT}.h" "$DSTDIR/${NAME}.h"',
-        "fi",
-      ].join("\n"),
-      shell: "bash",
-    },
-    {
-      name: "Copy Extra Files",
-      if: "${{ matrix.include_files[0] }}",
-      run: 'for f in ${{ join(matrix.include_files, \' \') }}; do\n  if [ -f "$f" ]; then\n    cp "$f" "target/release/"\n  fi\ndone',
-      shell: "bash",
-    },
-  ];
-}
-
-function toStep(ps: PackageStep): Step {
-  const step: Step = { name: ps.name, if: ps.ifCondition };
-
-  if (ps.run) {
-    step.run = ps.run;
-  }
-  if (ps.uses) {
-    step.uses = ps.uses;
-  }
-  if (ps.with) {
-    step.with = ps.with;
-  }
-  if (ps.shell) {
-    step.shell = ps.shell;
-  }
-  if (ps.linker && ps.linker.trim() !== "" && !ps.linker.includes("${{")) {
-    step.env = {
-      RUSTFLAGS: `-C linker=${ps.linker}`,
-    };
-  }
-
-  return step;
-}
-
-function buildPackagingSteps(): Step[] {
+function translatePackage(baseIf?: string): Step[] {
   const steps: Step[] = [];
 
   for (const pkg of ["deb", "rpm", "msi"] as const) {
     const packager = PACKAGERS[pkg];
     if (packager) {
-      steps.push(...packager.setupSteps.map(toStep));
-      steps.push(...packager.buildSteps.map(toStep));
+      steps.push(
+        ...packager.setupSteps.map((ps) => ({
+          name: ps.name,
+          uses: ps.uses,
+          run: ps.run,
+          shell: ps.shell,
+          with: ps.with,
+          if: ps.ifCondition,
+        })),
+      );
+      steps.push(
+        ...packager.buildSteps.map((ps) => ({
+          name: ps.name,
+          uses: ps.uses,
+          run: ps.run,
+          shell: ps.shell,
+          with: ps.with,
+          if: ps.ifCondition,
+        })),
+      );
     }
   }
 
+  // Add archive and bin export steps (kept here for now, as they are platform-neutral but easy to keep in builtin)
+  // Actually, these should ideally be in ExportSteps of the language, but they are very similar across languages.
+  // For now, let's keep them as part of the "package" builtin translation.
+
+  for (const ps of steps) {
+    if (baseIf) {
+      if (ps.if) {
+        ps.if = `(${ps.if}) && (${baseIf})`;
+      } else {
+        ps.if = baseIf;
+      }
+    }
+  }
   return steps;
 }
 
-function buildBinarySteps(): Step[] {
-  return [
-    {
-      name: "Export Binary",
-      if: "(matrix.has_bin) && (matrix.artifact_type == 'bin')",
-      run: 'mkdir -p _packages\ncp "target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}" "_packages/"',
-      shell: "bash",
-    },
-    {
-      name: "Export Library",
-      if: "(matrix.has_bin) && (matrix.artifact_type == 'lib')",
-      run: "mkdir -p _packages\ncp target/release/lib${{ matrix.output_name }}.* _packages/ 2>/dev/null || true\ncp target/release/${{ matrix.output_name }}.* _packages/ 2>/dev/null || true",
-      shell: "bash",
-    },
-  ];
-}
+function translateAbstractStep(
+  ctx: StrategyContext,
+  step: AbstractStep,
+  config: RefineryConfig,
+  baseIf?: string,
+): Step[] {
+  if (step.type === "shell") {
+    const s: Step = {
+      name: step.name,
+      run: step.run,
+      shell: step.shell,
+      env: step.env,
+      if: step.if,
+    };
+    if (baseIf) {
+      s.if = s.if ? `(${s.if}) && (${baseIf})` : baseIf;
+    }
+    return [s];
+  }
 
-function buildArchiveSteps(): Step[] {
-  return [
-    {
-      name: "Package Binary",
-      if: "(matrix.has_archive) && (matrix.artifact_type == 'bin')",
-      run: 'ARCHIVE_DIR="${PWD}/_packages"\nmkdir -p "$ARCHIVE_DIR"\nSTAGING_DIR="target/archive_staging/${{ matrix.output_name }}"\nmkdir -p "$STAGING_DIR"\ncp "target/release/${{ matrix.output_name }}${{ matrix.bin_ext }}" "$STAGING_DIR/"\nfor f in ${{ join(matrix.include_files, \' \') }}; do\n  if [ -f "$f" ]; then\n    cp "$f" "$STAGING_DIR/"\n  fi\ndone\n\nif [ "${{ matrix.package_type }}" = "zip" ]; then\n  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${{ matrix.output_name }}.zip" .) > /dev/null\nelse\n  tar -czf "$ARCHIVE_DIR/${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .\nfi',
-      shell: "bash",
-    },
-    {
-      name: "Package Library",
-      if: "(matrix.has_archive) && (matrix.artifact_type == 'lib')",
-      run: [
-        'ARCHIVE_DIR="${PWD}/_packages"',
-        'mkdir -p "$ARCHIVE_DIR"',
-        'STAGING_DIR="target/archive_staging/${{ matrix.output_name }}"',
-        'mkdir -p "$STAGING_DIR"',
-        'cp target/release/lib${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true',
-        'cp target/release/${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true',
-        "for f in ${{ join(matrix.include_files, ' ') }}; do",
-        '  if [ -f "$f" ]; then',
-        '    cp "$f" "$STAGING_DIR/"',
-        "  fi",
-        "done",
-        'if [ "${{ matrix.package_type }}" = "zip" ]; then',
-        '  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${{ matrix.output_name }}.zip" .) > /dev/null',
-        "else",
-        '  tar -czf "$ARCHIVE_DIR/${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .',
-        "fi",
-      ].join("\n"),
-      shell: "bash",
-    },
-  ];
+  if (step.type === "action" || (step as any).type === "composite") {
+    const s: Step = {
+      name: step.name ?? ((step as any).action ? `Execute ${(step as any).action}` : undefined),
+      uses: step.type === "action" ? step.uses : `./.github/actions/${(step as any).action}`,
+      with: step.with as Record<string, string | boolean>,
+      env: (step as any).env,
+      if: step.if,
+    };
+
+    if ((step as any).secrets && Array.isArray((step as any).secrets)) {
+      s.env = s.env || {};
+      for (const secret of (step as any).secrets) {
+        s.env[secret] = `\${{ secrets.${secret} }}`;
+      }
+    }
+
+    if (baseIf) {
+      s.if = s.if ? `(${s.if}) && (${baseIf})` : baseIf;
+    }
+    return [s];
+  }
+
+  if (step.type === "builtin") {
+    switch (step.builtin) {
+      case "checkout":
+        return [
+          {
+            name: "Checkout",
+            uses: Actions.checkout,
+            if: baseIf,
+          },
+        ];
+      case "setup_toolchain": {
+        const langSetupSteps = ctx.lang.getSetupSteps(ctx, GHA_TARGET);
+        const steps: Step[] = [];
+        for (const s of langSetupSteps) {
+          // If it's the main toolchain setup, we might want to preserve some defaults
+          if (s.type === "builtin" && s.builtin === "setup_toolchain") {
+            steps.push({
+              name: s.name ?? step.name ?? "Setup Toolchain",
+              uses: Actions.setupRust, // Hardcoded for now
+              with: {
+                target: "${{ matrix.target_triple }}",
+                cache: true,
+                ...(s.with ?? {}),
+                ...(step.with ?? {}),
+              },
+              if: baseIf,
+            });
+          } else {
+            steps.push(...translateAbstractStep(ctx, s, config, baseIf));
+          }
+        }
+        return steps;
+      }
+      case "setup_linker":
+        return translateSetupLinker(baseIf);
+      case "package":
+        return translatePackage(baseIf);
+      case "upload_artifact":
+        return [
+          {
+            name: "Upload Artifact",
+            uses: Actions.uploadArtifact,
+            with: {
+              name: "${{ matrix.output_name }}",
+              path: "_packages/",
+              ...(step.with ?? {}),
+            },
+            if: baseIf,
+          },
+        ];
+    }
+  }
+
+  return [];
 }
 
 function getMatchingTriples(
@@ -286,174 +300,9 @@ function getStepIfCondition(
   return getTargetsCondition(targets, config, entries);
 }
 
-function translateCheckout(baseIf?: string): Step {
-  const step: Step = {
-    name: "Checkout",
-    uses: Actions.checkout,
-  };
-  if (baseIf) {
-    step.if = baseIf;
-  }
-  return step;
-}
-
-function buildCbindgenInstallStep(config: RefineryConfig): Step | undefined {
-  // Check if any target or artifact has headers enabled
-  const hasHeaders =
-    config.targets?.some((t) => t.type === "lib" && t.headers) ||
-    config.artifacts?.some((a) => a.type === "lib" && a.headers);
-  if (!hasHeaders) {
-    return;
-  }
-  return {
-    name: "Install cbindgen",
-    if: "matrix.headers == true",
-    uses: "taiki-e/install-action@v2",
-    with: {
-      tool: "cbindgen",
-    },
-  };
-}
-
-function translateSetupToolchain(step: PreBuildStep | PostBuildStep, baseIf?: string): Step {
-  const s: Step = {
-    name: "Setup Rust",
-    uses: Actions.setupRust,
-    with: {
-      target: "${{ matrix.target_triple }}",
-      cache: true,
-      ...(step.with ?? {}),
-    },
-  };
-  if (baseIf) {
-    s.if = baseIf;
-  }
-  return s;
-}
-
-function translateSetupLinker(baseIf?: string): Step[] {
-  const depSteps = buildSystemDependenciesSteps();
-  for (const ds of depSteps) {
-    if (baseIf) {
-      if (ds.if) {
-        ds.if = `(${ds.if}) && (${baseIf})`;
-      } else {
-        ds.if = baseIf;
-      }
-    }
-  }
-  return depSteps;
-}
-
-function translatePackage(baseIf?: string): Step[] {
-  const packageSteps = [
-    ...buildPreparationSteps(),
-    ...buildPackagingSteps(),
-    ...buildBinarySteps(),
-    ...buildArchiveSteps(),
-  ];
-  for (const ps of packageSteps) {
-    if (baseIf) {
-      if (ps.if) {
-        ps.if = `(${ps.if}) && (${baseIf})`;
-      } else {
-        ps.if = baseIf;
-      }
-    }
-  }
-  return packageSteps;
-}
-
-function translateUploadArtifact(step: PreBuildStep | PostBuildStep, baseIf?: string): Step {
-  const s: Step = {
-    name: "Upload Artifact",
-    uses: Actions.uploadArtifact,
-    with: {
-      name: "${{ matrix.output_name }}",
-      path: "_packages/",
-      ...(step.with ?? {}),
-    },
-  };
-  if (baseIf) {
-    s.if = baseIf;
-  }
-  return s;
-}
-
-function translateBuiltinStep(
-  step: PreBuildStep | PostBuildStep,
-  config: RefineryConfig,
-  baseIf?: string,
-): Step[] {
-  if (step.type !== "builtin") {
-    return [];
-  }
-  if (step.builtin === "checkout") {
-    return [translateCheckout(baseIf)];
-  }
-  if (step.builtin === "setup_toolchain") {
-    const steps = [translateSetupToolchain(step, baseIf)];
-    const installCbindgen = buildCbindgenInstallStep(config);
-    if (installCbindgen) {
-      if (baseIf) {
-        installCbindgen.if = `(${installCbindgen.if}) && (${baseIf})`;
-      }
-      steps.push(installCbindgen);
-    }
-    return steps;
-  }
-  if (step.builtin === "setup_linker") {
-    return translateSetupLinker(baseIf);
-  }
-  if (step.builtin === "package") {
-    return translatePackage(baseIf);
-  }
-  if (step.builtin === "upload_artifact") {
-    return [translateUploadArtifact(step, baseIf)];
-  }
-  return [];
-}
-
-function translateCompositeStep(step: PreBuildStep | PostBuildStep, baseIf?: string): Step[] {
-  if (step.type !== "composite") {
-    return [];
-  }
-  const s: Step = {
-    name: step.name ?? `Execute ${step.action}`,
-    uses: `./.github/actions/${step.action}`,
-  };
-
-  if (step.with) {
-    s.with = step.with as Record<string, string | boolean>;
-  }
-
-  if (step.secrets && Array.isArray(step.secrets)) {
-    s.env = {};
-    for (const secret of step.secrets) {
-      s.env[secret] = `\${{ secrets.${secret} }}`;
-    }
-  }
-
-  if (baseIf) {
-    s.if = baseIf;
-  }
-
-  return [s];
-}
-
-function translateStep(step: PreBuildStep | PostBuildStep, config: RefineryConfig): Step[] {
-  const baseIf = getStepIfCondition(step, config);
-  if (step.type === "builtin") {
-    return translateBuiltinStep(step, config, baseIf);
-  }
-  if (step.type === "composite") {
-    return translateCompositeStep(step, baseIf);
-  }
-  return [];
-}
-
-export function buildSteps(config: RefineryConfig): Step[] {
+export function buildSteps(ctx: StrategyContext): Step[] {
   const steps: Step[] = [];
+  const { config, lang } = ctx;
 
   let preBuildSteps = defaultPreBuild;
   if (config.pre_build && config.pre_build.length > 0) {
@@ -461,12 +310,24 @@ export function buildSteps(config: RefineryConfig): Step[] {
   }
 
   for (const step of preBuildSteps) {
-    if (step.enabled !== false) {
-      steps.push(...translateStep(step, config));
+    if (step.enabled === false) continue;
+
+    const baseIf = getStepIfCondition(step, config);
+    if (step.type === "builtin") {
+      // For builtins, we let the strategy provide setup/build/export steps if needed,
+      // but here we are translating the pre_build/post_build blocks from the manifest.
+      // If it's a builtin in the manifest, we use our local translation.
+      steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
+    } else {
+      steps.push(...translateAbstractStep(ctx, step as AbstractStep, config, baseIf));
     }
   }
 
-  steps.push(...buildCompilationSteps());
+  // Compilation steps from Language Strategy
+  const langBuildSteps = lang.getBuildSteps(ctx, GHA_TARGET);
+  for (const s of langBuildSteps) {
+    steps.push(...translateAbstractStep(ctx, s, config));
+  }
 
   let postBuildSteps = defaultPostBuild;
   if (config.post_build && config.post_build.length > 0) {
@@ -474,8 +335,27 @@ export function buildSteps(config: RefineryConfig): Step[] {
   }
 
   for (const step of postBuildSteps) {
-    if (step.enabled !== false) {
-      steps.push(...translateStep(step, config));
+    if (step.enabled === false) continue;
+
+    const baseIf = getStepIfCondition(step, config);
+    if (step.type === "builtin") {
+      // Special case: "package" builtin should also include Lang's ExportSteps
+      if (step.builtin === "package") {
+        const langExportSteps = lang.getExportSteps(ctx, GHA_TARGET);
+        for (const s of langExportSteps) {
+          // Filter out builtins from ExportSteps that we are already handling here
+          if (
+            s.type === "builtin" &&
+            (s.builtin === "package" || s.builtin === "upload_artifact")
+          ) {
+            continue;
+          }
+          steps.push(...translateAbstractStep(ctx, s, config, baseIf));
+        }
+      }
+      steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
+    } else {
+      steps.push(...translateAbstractStep(ctx, step as AbstractStep, config, baseIf));
     }
   }
 

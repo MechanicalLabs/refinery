@@ -79,6 +79,7 @@ function runStrategyHooks(
   const strategyCtx: StrategyContext = {
     projectName,
     config: ctx.manifest,
+    lang: ctx.lang,
     cwd: process.cwd(),
     sys: {
       sh,

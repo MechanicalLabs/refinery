@@ -14,7 +14,7 @@ export const githubStrategy: PlatformStrategy = {
       .andThen(() =>
         ctx.sys.fs.writeFile(
           path.join(ctx.cwd, WORKFLOW_DIR, "refinery-build.yml"),
-          buildWorkflowYaml(ctx.config),
+          buildWorkflowYaml(ctx),
         ),
       )
       .map(() => undefined).result,

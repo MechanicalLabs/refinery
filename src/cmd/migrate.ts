@@ -3,7 +3,7 @@ import { type AsyncResult, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
 import type { RefineryConfig } from "../core/schema";
-import { PlatformRegistry } from "../core/strategy/registry";
+import { LanguageRegistry, PlatformRegistry } from "../core/strategy/registry";
 import type { StrategyContext } from "../core/strategy/types";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
@@ -109,12 +109,19 @@ async function runMigrate(): AsyncResult<void, Error> {
     return platformResult;
   }
 
+  const langResult = LanguageRegistry.get(config.lang);
+  if (!langResult.ok) {
+    return langResult;
+  }
+
   const strategy = platformResult.value;
+  const lang = langResult.value;
   const projectName = path.basename(process.cwd());
 
   const ctx: StrategyContext = {
     projectName,
     config,
+    lang,
     cwd: process.cwd(),
     sys: {
       sh,

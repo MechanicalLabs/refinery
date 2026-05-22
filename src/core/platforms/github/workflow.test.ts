@@ -5,7 +5,9 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: test suite contains all GHA tests
 import { describe, expect, it } from "bun:test";
 import { load } from "js-yaml";
+import { rustStrategy } from "../../lang/rust/strategy";
 import type { RefineryConfig } from "../../schema";
+import type { StrategyContext } from "../../strategy/types";
 import { buildWorkflowYaml } from "./workflow";
 
 const config = {
@@ -38,10 +40,25 @@ const config = {
     panic: "abort",
   },
 } as unknown as RefineryConfig;
+const createCtx = (c: RefineryConfig): StrategyContext => ({
+  projectName: "test-app",
+  config: c,
+  lang: rustStrategy,
+  cwd: "/",
+  sys: {
+    sh: () => ({}) as any,
+    fs: {
+      exists: () => ({}) as any,
+      readFile: () => ({}) as any,
+      writeFile: () => ({}) as any,
+      mkdir: () => ({}) as any,
+    },
+  },
+});
 
 describe("GitHub workflow generation basics", () => {
   it("should generate valid YAML with correct matrix size", () => {
-    const yaml = buildWorkflowYaml(config);
+    const yaml = buildWorkflowYaml(createCtx(config));
     const parsed = load(yaml) as {
       name: string;
       jobs: { build: { strategy: { matrix: { include: unknown[] } } } };
@@ -52,7 +69,7 @@ describe("GitHub workflow generation basics", () => {
   });
 
   it("should resolve output names correctly in matrix", () => {
-    const yaml = buildWorkflowYaml(config);
+    const yaml = buildWorkflowYaml(createCtx(config));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -73,7 +90,7 @@ describe("GitHub workflow generation basics", () => {
 
 describe("GitHub workflow release profile", () => {
   it("should include release profile env variables if configured", () => {
-    const yaml = buildWorkflowYaml(config);
+    const yaml = buildWorkflowYaml(createCtx(config));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -126,7 +143,7 @@ describe("GitHub workflow packaging", () => {
   } as unknown as RefineryConfig;
 
   it("should set package flags and include_files in matrix entries", () => {
-    const yaml = buildWorkflowYaml(pkgConfig);
+    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -173,7 +190,7 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should include packaging install and build steps for deb/rpm/msi", () => {
-    const yaml = buildWorkflowYaml(pkgConfig);
+    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -197,7 +214,7 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should generate conditional steps with correct if expressions", () => {
-    const yaml = buildWorkflowYaml(pkgConfig);
+    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -218,7 +235,7 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should upload _packages directory as artifact", () => {
-    const yaml = buildWorkflowYaml(pkgConfig);
+    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -298,7 +315,7 @@ describe("GitHub workflow hooks", () => {
   };
 
   it("should generate dynamic workflow with custom pre_build, post_build, and publish hooks", () => {
-    const yaml = buildWorkflowYaml(hooksConfig);
+    const yaml = buildWorkflowYaml(createCtx(hooksConfig as unknown as RefineryConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -361,7 +378,7 @@ describe("GitHub workflow library and WASM support", () => {
   } as unknown as RefineryConfig;
 
   it("should generate correct matrix entries for libraries and WebAssembly", () => {
-    const yaml = buildWorkflowYaml(libConfig);
+    const yaml = buildWorkflowYaml(createCtx(libConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -393,7 +410,7 @@ describe("GitHub workflow library and WASM support", () => {
   });
 
   it("should inject cbindgen installation step", () => {
-    const yaml = buildWorkflowYaml(libConfig);
+    const yaml = buildWorkflowYaml(createCtx(libConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -409,7 +426,7 @@ describe("GitHub workflow library and WASM support", () => {
   });
 
   it("should generate library packaging and export steps", () => {
-    const yaml = buildWorkflowYaml(libConfig);
+    const yaml = buildWorkflowYaml(createCtx(libConfig));
     const parsed = load(yaml) as {
       jobs: {
         build: {
