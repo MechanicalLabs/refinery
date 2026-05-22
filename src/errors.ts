@@ -70,6 +70,15 @@ export const Errors = createErrors({
   validationError: {
     message: (args: { reason: string }) => `Configuration validation failed: ${args.reason}`,
   },
+  toolMissing: {
+    message: (args: { tool: string }) => `Tool '${args.tool}' not found in PATH`,
+    help: (args: { tool: string }) => `Please install '${args.tool}' to continue.`,
+  },
+  unsupportedTarget: {
+    message: (args: { triple: string }) =>
+      `Target triple '${args.triple}' is not supported by Refinery`,
+    help: () => "Check the documentation for a list of supported targets.",
+  },
 });
 
 export type AppError = typeof Errors._type;

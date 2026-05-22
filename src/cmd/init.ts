@@ -43,6 +43,8 @@ async function checkPreconditions(force: boolean): AsyncResult<boolean, Error> {
     .on(Errors.compositeActionReadFailed, (e) => Err(e))
     .on(Errors.compositeActionParseFailed, (e) => Err(e))
     .on(Errors.invalidCompositeAction, (e) => Err(e))
+    .on(Errors.toolMissing, (e) => Err(e))
+    .on(Errors.unsupportedTarget, (e) => Err(e))
     .exhaustive() as Result<boolean, Error>;
 }
 
