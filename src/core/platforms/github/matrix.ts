@@ -2,7 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
 // biome-ignore-all lint/complexity/useLiteralKeys: GHA env var names need bracket notation
 import type { RefineryConfig } from "../../schema";
-import { TRIPLES } from "./matrix-constants";
+import { TargetRegistry } from "../../strategy/target-registry";
 
 const DEFAULT_OUTPUT_PATTERN = "{name}-{os}-{arch}";
 const TRAILING_DASH_RE = /-$/u;
@@ -12,7 +12,7 @@ export interface MatrixEntry {
   artifact_type: "bin" | "lib";
   os: string;
   arch: string;
-  abi?: string;
+  abi?: string | undefined;
   runs_on: string;
   output_name: string;
   artifact_bin: string;
@@ -28,7 +28,7 @@ export interface MatrixEntry {
   apt_packages: string[];
   bin_ext: string;
   headers: boolean;
-  linker?: string;
+  linker?: string | undefined;
 }
 
 interface PackageFlags {
@@ -37,59 +37,6 @@ interface PackageFlags {
   has_msi: boolean;
   has_archive: boolean;
   has_bin: boolean;
-}
-
-function getRunsOn(os: string, arch: string): string {
-  if (arch === "arm64") {
-    if (os === "linux") {
-      return "ubuntu-24.04-arm";
-    }
-    if (os === "windows") {
-      return "windows-11-arm";
-    }
-  }
-  if (os === "linux") {
-    return "ubuntu-latest";
-  }
-  if (os === "macos") {
-    return "macos-latest";
-  }
-  if (os === "windows") {
-    return "windows-latest";
-  }
-
-  return "ubuntu-latest";
-}
-
-function getAbiKey(os: string, abi: string | undefined): string | undefined {
-  if (abi === undefined) {
-    if (os === "windows") {
-      return "msvc";
-    }
-    return;
-  }
-  if (os === "linux" && abi === "gnu") {
-    return;
-  }
-  if (os === "windows" && abi === "msvc") {
-    return;
-  }
-
-  return abi;
-}
-
-function getTargetTriple(os: string, arch: string, abi?: string): string {
-  const abiKey = getAbiKey(os, abi);
-
-  let key: string;
-
-  if (abiKey === undefined) {
-    key = `${os}/${arch}`;
-  } else {
-    key = `${os}/${arch}:${abiKey}`;
-  }
-
-  return TRIPLES[key] ?? "x86_64-unknown-linux-gnu";
 }
 
 function getDefaultPackages(os: string): string[] {
@@ -126,44 +73,6 @@ function resolveOutputName(
   return `${res}-${target.os}-${arch}`;
 }
 
-function getLinker(triple: string): string | undefined {
-  const linkers: Record<string, string> = {
-    "armv7-unknown-linux-gnueabihf": "arm-linux-gnueabihf-gcc",
-    "aarch64-unknown-linux-gnu": "aarch64-linux-gnu-gcc",
-    "aarch64-unknown-linux-musl": "aarch64-linux-gnu-gcc",
-    "i686-pc-windows-gnu": "i686-w64-mingw32-gcc",
-    "x86_64-pc-windows-gnu": "x86_64-w64-mingw32-gcc",
-  };
-
-  return linkers[triple];
-}
-
-function getAptPackages(os: string, triple: string, packages: string[]): string[] {
-  const apt: string[] = [];
-
-  if (os !== "linux") {
-    return apt;
-  }
-
-  if (triple.includes("musl")) {
-    apt.push("musl-tools");
-  }
-  if (triple.startsWith("i686")) {
-    apt.push("gcc-multilib");
-  }
-  if (triple.startsWith("armv7")) {
-    apt.push("gcc-arm-linux-gnueabihf");
-  }
-  if (triple.startsWith("aarch64")) {
-    apt.push("gcc-aarch64-linux-gnu");
-  }
-  if (packages.includes("rpm")) {
-    apt.push("rpm");
-  }
-
-  return apt;
-}
-
 function buildPackageFlags(packages: string[]): PackageFlags {
   return {
     has_deb: packages.includes("deb"),
@@ -178,20 +87,27 @@ function buildBaseEntry(
   target: RefineryConfig["targets"][0],
   arch: string,
   artifacts: Map<string, RefineryConfig["artifacts"][0]>,
-): MatrixEntry {
+): MatrixEntry | undefined {
+  const targetInfo = TargetRegistry.find({
+    os: target.os,
+    arch,
+    abi: target.abi,
+  });
+
+  if (!targetInfo) {
+    return undefined;
+  }
+
   const outputName = resolveOutputName(target, arch, artifacts);
   const packages = target.packages ?? getDefaultPackages(target.os);
-  const triple = getTargetTriple(target.os, arch, target.abi);
   const flags = buildPackageFlags(packages);
 
   let packageType = "tar.gz";
-
   if (packages.includes("zip")) {
     packageType = "zip";
   }
 
   let binExt = "";
-
   if (target.os === "windows" && target.type === "bin") {
     binExt = ".exe";
   }
@@ -200,32 +116,32 @@ function buildBaseEntry(
   const headersEnabled =
     (target.type === "lib" && target.headers) || (art?.type === "lib" && art.headers);
 
+  const aptPackages = [...targetInfo.aptPackages];
+  if (packages.includes("rpm") && !aptPackages.includes("rpm")) {
+    aptPackages.push("rpm");
+  }
+
   const entry: MatrixEntry = {
     artifact: target.for,
     artifact_type: target.type,
     os: target.os,
     arch,
-    runs_on: getRunsOn(target.os, arch),
+    runs_on: targetInfo.runsOn,
     output_name: outputName,
     artifact_bin: target.for.replace(/-/gu, "_"),
-    target_triple: triple,
+    target_triple: targetInfo.triple,
     package_type: packageType,
     packages,
     ...flags,
     include_files: target.includeInPackage ?? [],
-    apt_packages: getAptPackages(target.os, triple, packages),
+    apt_packages: aptPackages,
     bin_ext: binExt,
     headers: headersEnabled,
+    linker: targetInfo.linker,
   };
 
   if (target.abi) {
     entry.abi = target.abi;
-  }
-
-  const linker = getLinker(triple);
-
-  if (linker) {
-    entry.linker = linker;
   }
 
   return entry;
@@ -243,7 +159,10 @@ function buildMatrix(config: RefineryConfig): MatrixEntry[] {
 
   for (const t of config.targets ?? []) {
     for (const arch of t.arch) {
-      entries.push(buildBaseEntry(t, arch, artifactMap));
+      const entry = buildBaseEntry(t, arch, artifactMap);
+      if (entry) {
+        entries.push(entry);
+      }
     }
   }
 

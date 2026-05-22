@@ -4,11 +4,11 @@
 import { type AsyncResult, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
-import { getAptPackages, getLinkerConfig } from "../core/linker";
 import type { MatrixEntry } from "../core/platforms/github/matrix";
 import { buildMatrix } from "../core/platforms/github/matrix";
 import type { PostBuildStep, PreBuildStep, PublishStep, RefineryConfig } from "../core/schema";
 import { LanguageRegistry } from "../core/strategy/registry";
+import { TargetRegistry } from "../core/strategy/target-registry";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../core/strategy/types";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
@@ -43,8 +43,13 @@ async function addTarget(triple: string): AsyncResult<void, Error> {
   return Ok();
 }
 
-async function installSystemDeps(triple: string, packages: string[]): AsyncResult<void, Error> {
-  const apt = getAptPackages(triple, packages);
+async function installSystemDeps(target: TargetMetadata): AsyncResult<void, Error> {
+  const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
+  const apt = targetInfo?.aptPackages ?? [];
+  if (target.packages.includes("rpm") && !apt.includes("rpm")) {
+    apt.push("rpm");
+  }
+
   if (apt.length === 0) {
     return Ok();
   }
@@ -56,8 +61,8 @@ async function installSystemDeps(triple: string, packages: string[]): AsyncResul
 }
 
 function buildEnvForEntry(target: TargetMetadata, config: RefineryConfig): Record<string, string> {
-  const linkerCfg = getLinkerConfig(target.triple);
-  const env: Record<string, string> = { ...(linkerCfg?.linkerEnv ?? {}) };
+  const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
+  const env: Record<string, string> = { ...(targetInfo?.linkerEnv ?? {}) };
 
   if (config.lang === "rust" && config.release) {
     const r = config.release;
@@ -191,7 +196,7 @@ async function executeAbstractStep(
         return addTarget(target.triple);
       case "setup_linker":
         if (target.os === "linux") {
-          return installSystemDeps(target.triple, target.packages);
+          return installSystemDeps(target);
         }
         return Ok();
       case "package":
