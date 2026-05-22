@@ -1,29 +1,23 @@
 import type { AsyncResult } from "ripthrow";
 import type { RefineryConfig } from "../schema";
+
 export interface StrategyContext {
   projectName: string;
   config: RefineryConfig;
   lang: LanguageStrategy;
   cwd: string;
   sys: {
-...
     sh: (
       strings: TemplateStringsArray,
       ...values: unknown[]
-    ) => AsyncResult<
-{
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}
-, Error>
-{
-  exists: (path: string) => AsyncResult<void, Error>;
-  readFile: (path: string) => AsyncResult<string, Error>;
-  writeFile: (path: string, content: string) => AsyncResult<number, Error>;
-  mkdir: (path: string) => AsyncResult<void, Error>;
-}
-}
+    ) => AsyncResult<{ stdout: string; stderr: string; exitCode: number }, Error>;
+    fs: {
+      exists: (path: string) => AsyncResult<void, Error>;
+      readFile: (path: string) => AsyncResult<string, Error>;
+      writeFile: (path: string, content: string) => AsyncResult<number, Error>;
+      mkdir: (path: string) => AsyncResult<void, Error>;
+    };
+  };
 }
 
 export type AbstractStep =
