@@ -252,6 +252,7 @@ describe("GitHub workflow hooks", () => {
     version: 1,
     platform: "github",
     lang: "rust",
+    toolchain: "stable",
     artifacts: [
       {
         type: "bin",
@@ -437,5 +438,44 @@ describe("GitHub workflow library and WASM support", () => {
     expect(steps.some((s) => s.name === "Prepare Library")).toBe(true);
     expect(steps.some((s) => s.name === "Export Library")).toBe(true);
     expect(steps.some((s) => s.name === "Package Library")).toBe(true);
+  });
+});
+
+describe("GitHub workflow toolchain pinning", () => {
+  it("should include pinned toolchain version in setup step", () => {
+    const pinnedConfig = {
+      version: 1,
+      lang: "rust",
+      platform: "github",
+      toolchain: "1.85.0",
+      artifacts: [],
+      targets: [],
+    } as unknown as RefineryConfig;
+
+    const yaml = buildWorkflowYaml(createCtx(pinnedConfig));
+    const parsed = load(yaml) as any;
+    const steps = parsed.jobs.build.steps;
+
+    const setupStep = steps.find((s: any) => s.name === "Setup Rust");
+    expect(setupStep).toBeDefined();
+    expect(setupStep.with?.toolchain).toBe("1.85.0");
+  });
+
+  it("should use stable as default toolchain", () => {
+    const defaultConfig = {
+      version: 1,
+      lang: "rust",
+      platform: "github",
+      artifacts: [],
+      targets: [],
+    } as unknown as RefineryConfig;
+
+    const yaml = buildWorkflowYaml(createCtx(defaultConfig));
+    const parsed = load(yaml) as any;
+    const steps = parsed.jobs.build.steps;
+
+    const setupStep = steps.find((s: any) => s.name === "Setup Rust");
+    expect(setupStep).toBeDefined();
+    expect(setupStep.with?.toolchain).toBe("stable");
   });
 });

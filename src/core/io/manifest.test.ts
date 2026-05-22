@@ -28,6 +28,7 @@ describe("manifest core io", () => {
       version: 1 as const,
       lang: "rust" as const,
       platform: "github" as const,
+      toolchain: "stable",
       artifacts: [{ type: "bin" as const, name: "app", outputName: "{name}" }],
       targets: [
         {

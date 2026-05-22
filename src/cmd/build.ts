@@ -36,8 +36,25 @@ function entryToMetadata(entry: MatrixEntry): TargetMetadata {
   };
 }
 
-async function addTarget(triple: string): AsyncResult<void, Error> {
-  const result = await sh`rustup target add ${triple}`;
+async function setupToolchain(triple: string, version?: string): AsyncResult<void, Error> {
+  if (version && version !== "stable") {
+    const installResult = await sh`rustup toolchain install ${version} --no-self-update`;
+    if (!installResult.ok) {
+      return Err(
+        Errors.targetAdditionFailed({
+          triple,
+          reason: `Failed to install toolchain ${version}: ${installResult.error.message}`,
+        }),
+      );
+    }
+  }
+
+  const cmd =
+    version && version !== "stable"
+      ? `rustup target add ${triple} --toolchain ${version}`
+      : `rustup target add ${triple}`;
+
+  const result = await sh`${cmd}`;
   if (!result.ok) {
     return Err(Errors.targetAdditionFailed({ triple, reason: result.error.message }));
   }
@@ -194,7 +211,7 @@ async function executeAbstractStep(
   if (step.type === "builtin") {
     switch (step.builtin) {
       case "setup_toolchain":
-        return addTarget(target.triple);
+        return setupToolchain(target.triple, step.with?.["toolchain"] as string | undefined);
       case "setup_linker":
         if (target.os === "linux") {
           return installSystemDeps(target);

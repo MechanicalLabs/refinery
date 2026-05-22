@@ -23,6 +23,7 @@ export const RustConfigSchema = z
     artifacts: z.array(Artifact).optional().default([]),
     targets: z.array(Target).optional().default([]),
     release: ReleaseSchema.optional(),
+    toolchain: z.string().optional().default("stable"),
   })
   .strict()
   .superRefine(validateConfigReferences)

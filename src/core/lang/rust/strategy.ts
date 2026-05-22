@@ -18,14 +18,17 @@ export const rustStrategy: LanguageStrategy = {
     // Rust-specific initialization logic
     return Promise.resolve(Ok());
   },
-  getSetupSteps: (_ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
+  getSetupSteps: (ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
     const steps: AbstractStep[] = [];
+    const toolchain =
+      ctx.config.lang === "rust" ? (ctx.config.toolchain as string) || "stable" : "stable";
 
     steps.push({
       type: "builtin",
       builtin: "setup_toolchain",
       name: "Setup Rust",
       with: {
+        toolchain,
         target: target.triple,
         cache: true,
       },
