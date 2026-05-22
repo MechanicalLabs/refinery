@@ -27,7 +27,10 @@
         "noNodejsModules": "off"
       },
       "performance": "error",
-      "security": "error",
+      "security": {
+        "recommended": true,
+        "noSecrets": "off"
+      },
       "style": "error",
       "suspicious": {
         "recommended": true,

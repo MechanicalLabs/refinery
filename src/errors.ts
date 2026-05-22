@@ -67,6 +67,9 @@ export const Errors = createErrors({
   invalidCompositeAction: {
     message: (args: { path: string }) => `Action at ${args.path} is not a valid composite action`,
   },
+  validationError: {
+    message: (args: { reason: string }) => `Configuration validation failed: ${args.reason}`,
+  },
 });
 
 export type AppError = typeof Errors._type;

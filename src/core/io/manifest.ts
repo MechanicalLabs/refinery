@@ -1,32 +1,50 @@
-import { type AsyncResult, buildAsync, kindOf, Ok, safe } from "ripthrow";
+import { type AsyncResult, buildAsync, kindOf, Ok, type Report, safe } from "ripthrow";
 import { parse, stringify } from "smol-toml";
-import type { AppError } from "../../errors";
-import { Errors } from "../../errors";
+import { type AppError, Errors } from "../../errors";
 import { type RefineryConfig, RefineryConfigSchema } from "../schema";
 import { exists, readFile, writeFile } from "./fs";
 
 const FILENAME = "refinery.toml";
 
-export function loadManifest(): AsyncResult<RefineryConfig, AppError | Error> {
+/**
+ * Loads and validates the refinery.toml manifest.
+ * Maps all internal errors (IO, Parse, Zod) to the AppError union.
+ */
+export function loadManifest(): AsyncResult<
+  RefineryConfig,
+  AppError | Report<Record<string, unknown>>
+> {
   return buildAsync(exists(FILENAME))
     .note("Checking for refinery.toml existence")
-    .mapErr((e): AppError | Error => e as any)
-    .andThen(() => readFile(FILENAME))
+    .mapErr((err): AppError | Report<Record<string, unknown>> => {
+      if (kindOf(err) === "ioFileNotFound") {
+        return Errors.manifestNotFound();
+      }
+      return Errors.validationError({ reason: String(err) });
+    })
+    .andThen(
+      () =>
+        buildAsync(readFile(FILENAME)).mapErr(
+          (err): AppError => Errors.validationError({ reason: String(err) }),
+        ).result,
+    )
     .note("Reading refinery.toml content")
-    .mapErr((e): AppError | Error => e as any)
-    .andThen((content) =>
+    .andThen((content: string) =>
       safe(() => {
         const data = parse(content);
         return RefineryConfigSchema.parse(data);
       }),
     )
     .note("Parsing and validating refinery.toml")
-    .mapErr((err): AppError | Error => {
-      // biome-ignore lint/security/noSecrets: false positive on error kind string
-      if (kindOf(err) === "ioFileNotFound") {
-        return Errors.manifestNotFound();
+    .mapErr((err): AppError | Report<Record<string, unknown>> => {
+      const kind = kindOf(err);
+      if (kind === "manifestNotFound" || kind === "validationError") {
+        return err as unknown as AppError;
       }
-      return err as any;
+      if (err && typeof err === "object" && "name" in err && err.name === "Report") {
+        return err as Report<Record<string, unknown>>;
+      }
+      return Errors.validationError({ reason: String(err) });
     }).result;
 }
 

@@ -1,12 +1,12 @@
 import path from "node:path";
 import { isCancel } from "@clack/prompts";
-import { buildAsync, Err, matchErr, Ok } from "ripthrow";
+import { buildAsync, Err, kindOf, matchErr, Ok, type Result } from "ripthrow";
 import { exists, readFile } from "../../core/io/fs";
 import type {
   CommonBinaryArtifact,
   CommonLibraryArtifact,
 } from "../../core/lang/common/schema/artifact";
-import { Errors } from "../../errors";
+import { type AppError, Errors } from "../../errors";
 import { logger } from "../../ui/log";
 import { type PromptGroup, step, toUiValidator } from "../../ui/prompt";
 import { parseCargoToml } from "../../utils/cargo";
@@ -35,35 +35,50 @@ function detectRustArtifacts(content: string): Artifact[] {
   return artifacts;
 }
 
+/**
+ * Probes for Cargo.toml and auto-detects artifacts.
+ * Uses matchErr to provide specific feedback.
+ */
 function promptRustArtifacts(): Promise<Artifact[] | undefined> {
   return buildAsync(exists("Cargo.toml"))
-    .andThen(() => readFile("Cargo.toml"))
+    .note("Checking for Cargo.toml")
+    .mapErr((err): AppError => {
+      if (kindOf(err) === "ioFileNotFound") {
+        return Errors.ioFileNotFound({ path: "Cargo.toml" });
+      }
+      return Errors.validationError({ reason: String(err) });
+    })
+    .andThen(
+      () =>
+        buildAsync(readFile("Cargo.toml")).mapErr(
+          (err): AppError => Errors.validationError({ reason: String(err) }),
+        ).result,
+    )
+    .note("Reading Cargo.toml")
     .map(detectRustArtifacts)
     .match({
       ok: (artifacts: Artifact[]): Artifact[] | undefined => {
         if (artifacts.length === 0) {
           logger.error("No binaries or libraries found in Cargo.toml.");
-          return;
+          return undefined;
         }
 
         logger.info(`Detected ${artifacts.length} artifact(s) from Cargo.toml:`);
         for (const a of artifacts) {
-          let label = "lib";
-          if (a.type === "bin") {
-            label = "bin";
-          }
+          const label = a.type === "bin" ? "bin" : "lib";
           logger.info(`  ${label}: ${a.name}`);
         }
         return artifacts;
       },
-      err: (err: Error): Artifact[] | undefined =>
-        // @ts-expect-error
-        matchErr(Err(err))
+      err: (err): Artifact[] | undefined =>
+        matchErr(Err(err) as Result<never, AppError>)
           .on(Errors.ioFileNotFound, () => {
             logger.error("No Cargo.toml found. Run `cargo init` or `cargo new` first.");
+            return undefined;
           })
-          .otherwise(() => {
-            logger.error(`Failed to read Cargo.toml: ${err.message}`);
+          .otherwise((e) => {
+            logger.error(`Failed to read Cargo.toml: ${e.message}`);
+            return undefined;
           }),
     });
 }
@@ -82,7 +97,7 @@ async function promptArtifacts(ui: PromptGroup, language: string): Promise<Artif
 
   const firstArtifact = await promptFirstArtifact(folderName);
   if (!firstArtifact) {
-    return;
+    return undefined;
   }
   artifacts.push(firstArtifact);
 
@@ -119,7 +134,7 @@ async function promptArtifacts(ui: PromptGroup, language: string): Promise<Artif
 
     addAnother = await step.confirm("Add another artifact?", false)();
     if (isCancel(addAnother)) {
-      return;
+      return undefined;
     }
   }
 
@@ -136,7 +151,7 @@ async function promptFirstArtifact(folderName: string): Promise<Artifact | undef
   ])();
 
   if (isCancel(firstType)) {
-    return;
+    return undefined;
   }
 
   let firstDefault: string;
@@ -149,7 +164,7 @@ async function promptFirstArtifact(folderName: string): Promise<Artifact | undef
   const firstName = await step.text("Artifact Name", firstDefault, toUiValidator(validateName))();
 
   if (isCancel(firstName)) {
-    return;
+    return undefined;
   }
 
   if (firstType === "bin") {
