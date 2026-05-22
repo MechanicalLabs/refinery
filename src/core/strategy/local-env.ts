@@ -11,6 +11,23 @@ import type { TargetMetadata } from "./types";
  */
 export const LocalEnv = {
   /**
+   * Checks if a required tool exists in the system's PATH.
+   */
+  async checkTool(name: string, command: string, silent = false): AsyncResult<void, Error> {
+    const result = await sh`which ${command}`;
+    if (result.ok && result.value.exitCode === 0) {
+      if (!silent) {
+        logger.done(`  ✓ ${name} found`);
+      }
+      return Ok();
+    }
+    if (!silent) {
+      logger.fail(`  ✗ ${name} NOT found (${command})`);
+    }
+    return Err(Errors.toolMissing({ tool: name }));
+  },
+
+  /**
    * Installs and configures a specific toolchain version for a target triple.
    */
   async setupToolchain(triple: string, version?: string, dryRun = false): AsyncResult<void, Error> {

@@ -293,6 +293,29 @@ async function buildSingleEntry(
     .mapErr((e): Error => e as Error).result;
 }
 
+async function validateToolchain(config: RefineryConfig): AsyncResult<void, Error> {
+  if (config.lang === "rust") {
+    const rustcRes = await LocalEnv.checkTool("rustc", "rustc", true);
+    if (!rustcRes.ok) {
+      return rustcRes;
+    }
+
+    const cargoRes = await LocalEnv.checkTool("cargo", "cargo", true);
+    if (!cargoRes.ok) {
+      return cargoRes;
+    }
+
+    const hasHeaders = config.targets.some((t) => t.type === "lib" && t.headers);
+    if (hasHeaders) {
+      const cbindgenRes = await LocalEnv.checkTool("cbindgen", "cbindgen", true);
+      if (!cbindgenRes.ok) {
+        return cbindgenRes;
+      }
+    }
+  }
+  return Ok();
+}
+
 async function runBuild(
   targetId?: string,
   options: { dryRun?: boolean; setup?: boolean } = {},
@@ -332,7 +355,10 @@ async function runBuild(
     logger.info(pc.cyan("Dry-run mode enabled. No real actions will be performed."));
   }
 
-  return buildAsync(runPhaseSteps(config.pre_build, config, true, dryRun))
+  return buildAsync(validateToolchain(config))
+    .note("Validating toolchain")
+    .mapErr((e): Error => e as Error)
+    .andThen(() => runPhaseSteps(config.pre_build, config, true, dryRun))
     .note("Running global pre-build steps")
     .mapErr((e): Error => e as Error)
     .andThen(async () => {

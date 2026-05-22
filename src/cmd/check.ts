@@ -1,24 +1,11 @@
 import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { loadManifest } from "../core/io/manifest";
+import { LocalEnv } from "../core/strategy/local-env";
 import { TargetRegistry } from "../core/strategy/target-registry";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
-import { sh } from "../utils/shell";
 import type { Cmd } from "./types";
-
-/**
- * Checks if a required tool exists in the system's PATH.
- */
-async function checkTool(name: string, command: string): AsyncResult<void, Error> {
-  const result = await sh`which ${command}`;
-  if (result.ok && result.value.exitCode === 0) {
-    logger.done(`  ✓ ${name} found`);
-    return Ok();
-  }
-  logger.fail(`  ✗ ${name} NOT found (${command})`);
-  return Err(Errors.toolMissing({ tool: name }));
-}
 
 /**
  * Validates the refinery manifest and the local environment.
@@ -34,19 +21,19 @@ async function runCheck(): AsyncResult<void, Error> {
 
       logger.info("\nChecking toolchain:");
       if (config.lang === "rust") {
-        const rustcRes = await checkTool("rustc", "rustc");
+        const rustcRes = await LocalEnv.checkTool("rustc", "rustc");
         if (!rustcRes.ok) {
           return rustcRes;
         }
 
-        const cargoRes = await checkTool("cargo", "cargo");
+        const cargoRes = await LocalEnv.checkTool("cargo", "cargo");
         if (!cargoRes.ok) {
           return cargoRes;
         }
 
         const hasHeaders = config.targets.some((t) => t.type === "lib" && t.headers);
         if (hasHeaders) {
-          const cbindgenRes = await checkTool("cbindgen", "cbindgen");
+          const cbindgenRes = await LocalEnv.checkTool("cbindgen", "cbindgen");
           if (!cbindgenRes.ok) {
             return cbindgenRes;
           }
