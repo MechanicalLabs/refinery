@@ -63,7 +63,7 @@ for (const cmd of CommandRegistry.all()) {
 
         // Print help text if available
         if (err.help) {
-          logger.info(`\nHelp: ${err.help()}`);
+          logger.info(`\nHelp: ${err.help}`);
         }
 
         process.exit(1);

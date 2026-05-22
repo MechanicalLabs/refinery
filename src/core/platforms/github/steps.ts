@@ -140,10 +140,7 @@ function translatePackage(baseIf?: string): Step[] {
     }
   }
 
-  // Add archive and bin export steps (kept here for now, as they are platform-neutral but easy to keep in builtin)
-  // Actually, these should ideally be in ExportSteps of the language, but they are very similar across languages.
-  // For now, let's keep them as part of the "package" builtin translation.
-
+  // Export and packaging steps
   for (const ps of steps) {
     if (baseIf) {
       if (ps.if) {
@@ -235,7 +232,7 @@ function translateAbstractStep(
           if (s.type === "builtin" && s.builtin === "setup_toolchain") {
             const stepObj: Step = {
               name: s.name ?? step.name ?? "Setup Toolchain",
-              uses: Actions.setupRust, // Hardcoded for now
+              uses: Actions.setupRust,
               with: {
                 target: "${{ matrix.target_triple }}",
                 cache: true,
