@@ -8,6 +8,7 @@ import { loadManifest } from "../core/io/manifest";
 import type { MatrixEntry } from "../core/platforms/github/matrix";
 import { buildMatrix } from "../core/platforms/github/matrix";
 import type { PostBuildStep, PreBuildStep, PublishStep, RefineryConfig } from "../core/schema";
+import { LocalEnv } from "../core/strategy/local-env";
 import { LanguageRegistry } from "../core/strategy/registry";
 import { TargetRegistry } from "../core/strategy/target-registry";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../core/strategy/types";
@@ -35,65 +36,6 @@ function entryToMetadata(entry: MatrixEntry): TargetMetadata {
     artifactBin: entry.artifact_bin,
     aptPackages: entry.apt_packages,
   };
-}
-
-async function setupToolchain(
-  triple: string,
-  version?: string,
-  dryRun = false,
-): AsyncResult<void, Error> {
-  const v = version && version !== "stable" ? version : "stable";
-
-  if (dryRun) {
-    logger.info(pc.dim(`  [dry-run] rustup toolchain install ${v}`));
-    logger.info(pc.dim(`  [dry-run] rustup target add ${triple} --toolchain ${v}`));
-    return Ok();
-  }
-
-  if (v !== "stable") {
-    const installResult = await sh`rustup toolchain install ${v} --no-self-update`;
-    if (!installResult.ok) {
-      return Err(
-        Errors.targetAdditionFailed({
-          triple,
-          reason: `Failed to install toolchain ${v}: ${installResult.error.message}`,
-        }),
-      );
-    }
-  }
-
-  const cmd =
-    v === "stable" ? `rustup target add ${triple}` : `rustup target add ${triple} --toolchain ${v}`;
-
-  const result = await sh`${cmd}`;
-  if (!result.ok) {
-    return Err(Errors.targetAdditionFailed({ triple, reason: result.error.message }));
-  }
-  return Ok();
-}
-
-async function installSystemDeps(target: TargetMetadata, dryRun = false): AsyncResult<void, Error> {
-  const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
-  const apt = targetInfo?.aptPackages ?? [];
-  if (target.packages.includes("rpm") && !apt.includes("rpm")) {
-    apt.push("rpm");
-  }
-
-  if (apt.length === 0) {
-    return Ok();
-  }
-
-  const cmd = `sudo apt-get update && sudo apt-get install -y ${apt.join(" ")}`;
-  if (dryRun) {
-    logger.info(pc.dim(`  [dry-run] ${cmd}`));
-    return Ok();
-  }
-
-  const result = await sh`${cmd}`;
-  if (!result.ok) {
-    return Err(Errors.systemDepsInstallFailed({ reason: result.error.message }));
-  }
-  return Ok();
 }
 
 function buildEnvForEntry(target: TargetMetadata, config: RefineryConfig): Record<string, string> {
@@ -204,8 +146,10 @@ async function executeAbstractStep(
   step: AbstractStep,
   ctx: StrategyContext,
   target: TargetMetadata,
-  dryRun = false,
+  options: { dryRun?: boolean; setup?: boolean } = {},
 ): AsyncResult<void, Error> {
+  const { dryRun = false, setup = false } = options;
+
   if (step.type === "shell") {
     // Basic condition filtering for local build
     if (step.if) {
@@ -242,14 +186,30 @@ async function executeAbstractStep(
   if (step.type === "builtin") {
     switch (step.builtin) {
       case "setup_toolchain":
-        return setupToolchain(
+        return LocalEnv.setupToolchain(
           target.triple,
           step.with?.["toolchain"] as string | undefined,
           dryRun,
         );
       case "setup_linker":
         if (target.os === "linux") {
-          return installSystemDeps(target, dryRun);
+          if (setup) {
+            return LocalEnv.installSystemDeps(target, dryRun);
+          }
+
+          const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
+          const apt = targetInfo?.aptPackages ?? [];
+          if (target.packages.includes("rpm") && !apt.includes("rpm")) {
+            apt.push("rpm");
+          }
+
+          if (apt.length > 0) {
+            logger.warn(
+              pc.yellow(
+                `  ! System dependencies may be missing: ${apt.join(", ")}. Run 'refinery build --setup' to install them.`,
+              ),
+            );
+          }
         }
         return Ok();
       case "package":
@@ -269,9 +229,10 @@ async function executeAbstractStep(
 async function buildSingleEntry(
   entry: MatrixEntry,
   ctx: StrategyContext,
-  dryRun = false,
+  options: { dryRun?: boolean; setup?: boolean } = {},
 ): AsyncResult<void, Error> {
   const target = entryToMetadata(entry);
+  const { dryRun = false } = options;
 
   return buildAsync(Promise.resolve(Ok()))
     .note(`Preparing build for ${entry.target_triple}`)
@@ -288,7 +249,7 @@ async function buildSingleEntry(
     .andThen(async () => {
       const setupSteps = ctx.lang.getSetupSteps(ctx, target);
       for (const s of setupSteps) {
-        const res = await executeAbstractStep(s, ctx, target, dryRun);
+        const res = await executeAbstractStep(s, ctx, target, options);
         if (!res.ok) {
           return res;
         }
@@ -300,7 +261,7 @@ async function buildSingleEntry(
     .andThen(async () => {
       const buildSteps = ctx.lang.getBuildSteps(ctx, target);
       for (const s of buildSteps) {
-        const res = await executeAbstractStep(s, ctx, target, dryRun);
+        const res = await executeAbstractStep(s, ctx, target, options);
         if (!res.ok) {
           return res;
         }
@@ -312,7 +273,7 @@ async function buildSingleEntry(
     .andThen(async () => {
       const exportSteps = ctx.lang.getExportSteps(ctx, target);
       for (const s of exportSteps) {
-        const res = await executeAbstractStep(s, ctx, target, dryRun);
+        const res = await executeAbstractStep(s, ctx, target, options);
         if (!res.ok) {
           return res;
         }
@@ -332,7 +293,11 @@ async function buildSingleEntry(
     .mapErr((e): Error => e as Error).result;
 }
 
-async function runBuild(targetId?: string, dryRun = false): AsyncResult<void, Error> {
+async function runBuild(
+  targetId?: string,
+  options: { dryRun?: boolean; setup?: boolean } = {},
+): AsyncResult<void, Error> {
+  const { dryRun = false } = options;
   const manifestRes = await loadManifest();
   if (!manifestRes.ok) {
     return manifestRes;
@@ -372,7 +337,7 @@ async function runBuild(targetId?: string, dryRun = false): AsyncResult<void, Er
     .mapErr((e): Error => e as Error)
     .andThen(async () => {
       for (const entry of entries) {
-        const buildRes = await buildSingleEntry(entry, ctx, dryRun);
+        const buildRes = await buildSingleEntry(entry, ctx, options);
         if (!buildRes.ok) {
           return buildRes;
         }
@@ -400,13 +365,15 @@ const buildCmd: Cmd = {
   options: [
     { flags: "-t, --target <id>", description: "Build only the specified target ID" },
     { flags: "--dry-run", description: "Preview the execution plan without running commands" },
+    { flags: "--setup", description: "Install required system dependencies via sudo apt-get" },
   ],
   action: (options: Record<string, unknown>): AsyncResult<void, Error> => {
     printBranding();
     const targetId = options["target"] as string | undefined;
     const dryRun = Boolean(options["dryRun"]);
+    const setup = Boolean(options["setup"]);
 
-    return buildAsync(runBuild(targetId, dryRun))
+    return buildAsync(runBuild(targetId, { dryRun, setup }))
       .tap(() => {
         logger.done(dryRun ? "Dry-run complete." : "Build complete.");
       })
