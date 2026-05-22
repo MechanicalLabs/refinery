@@ -216,7 +216,7 @@ async function executeAbstractStep(
         if (dryRun) {
           logger.info(pc.dim("  [dry-run] Package artifacts (not implemented locally)"));
         }
-        // TODO: Implement local packaging or just skip for now
+        // TODO: Implement local packaging
         return Ok();
       default:
         return Ok();

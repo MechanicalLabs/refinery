@@ -49,19 +49,19 @@ for (const cmd of CommandRegistry.all()) {
     ) {
       const result = await actionResult;
 
-      // Handle ripthrow Result/AsyncResult
+      // Process Result/AsyncResult outcomes
       if (result && typeof result === "object" && "ok" in result && !result.ok) {
         const err = result.error as any;
         logger.fail(err);
 
-        // Print contextual notes if available (Report type)
+        // Render contextual traceability notes
         if (err.notes && Array.isArray(err.notes) && err.notes.length > 0) {
           for (const note of err.notes) {
             logger.info(`  └ ${note}`);
           }
         }
 
-        // Print help text if available
+        // Render help instructions
         if (err.help) {
           logger.info(`\nHelp: ${err.help}`);
         }
