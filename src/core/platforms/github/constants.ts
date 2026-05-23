@@ -23,6 +23,15 @@
  *     "softprops/action-gh-release",
  *     "peter-evans/create-pull-request",
  *     "actions-rust-lang/setup-rust-toolchain",
+ *     "taiki-e/install-action",
+ *   ]
+ *
+ *   _TRACKED_RUNNERS = [
+ *     "ubuntu",
+ *     "ubuntu-arm",
+ *     "macos",
+ *     "windows",
+ *     "windows-arm",
  *   ]
  *
  *   _CONSTANTS_FILE_PATH = "src/core/platforms/github/constants.ts"
@@ -35,7 +44,20 @@ export const Actions = {
   downloadArtifact: "actions/download-artifact@v8",
   ghRelease: "softprops/action-gh-release@v3",
   createPullRequest: "peter-evans/create-pull-request@v8",
-  installPackager: "MechanicalLabs/refinery/install-packager@v0",
-  setupLinker: "MechanicalLabs/refinery/setup-linker@v0",
+  installAction: "taiki-e/install-action@v2",
   setupMingw: "egor-tensin/setup-mingw@v3",
+} as const;
+
+/**
+ * Pinned GitHub Actions runner versions.
+ *
+ * Floating labels like 'ubuntu-latest' are avoided for build reproducibility.
+ * These are auto-updated by .github/workflows/update-constants.yml.
+ */
+export const Runners = {
+  linux: "ubuntu-24.04",
+  linuxArm: "ubuntu-24.04-arm",
+  macos: "macos-26",
+  windows: "windows-2025",
+  windowsArm: "windows-11-arm",
 } as const;

@@ -199,8 +199,9 @@ describe("GitHub workflow packaging", () => {
     };
     const { steps } = parsed.jobs.build;
 
-    expect(steps.some((s) => s.name === "Setup Linker")).toBe(true);
-    expect(steps.some((s) => s.name === "Install cargo-binstall")).toBe(false);
+    expect(steps.some((s: any) => s.name === "Configure Linker and System Dependencies")).toBe(
+      true,
+    );
     expect(steps.some((s) => s.name === "Install cargo-deb")).toBe(true);
     expect(steps.some((s) => s.name === "Build .deb package")).toBe(true);
     expect(steps.some((s) => s.name === "Install cargo-generate-rpm")).toBe(true);

@@ -1,20 +1,19 @@
 // biome-ignore-all lint/style/useNamingConvention: GHA env vars and config keys
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: GHA steps generator needs to contain all translation logic
 
-import { PACKAGERS } from "../../packaging";
 import type { PostBuildStep, PreBuildStep, RefineryConfig } from "../../schema";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../../strategy/types";
 import { Actions } from "./constants";
 import { buildMatrix } from "./matrix";
 
-interface Step {
+interface GitHubStep {
   name: string;
-  uses?: string;
-  run?: string;
-  shell?: string;
-  with?: Record<string, string | boolean | number>;
-  env?: Record<string, string>;
-  if?: string;
+  uses?: string | undefined;
+  run?: string | undefined;
+  shell?: string | undefined;
+  with?: Record<string, string | boolean | number> | undefined;
+  env?: Record<string, string> | undefined;
+  if?: string | undefined;
 }
 
 const GHA_TARGET: TargetMetadata = {
@@ -32,26 +31,29 @@ const GHA_TARGET: TargetMetadata = {
   aptPackages: [],
 };
 
-const defaultPreBuild: PreBuildStep[] = [
-  { type: "builtin", builtin: "checkout", targets: "all" },
-  { type: "builtin", builtin: "setup_toolchain", targets: "all" },
-  { type: "builtin", builtin: "setup_linker", targets: "all" },
-];
-
-const defaultPostBuild: PostBuildStep[] = [
-  { type: "builtin", builtin: "package", targets: "all" },
-  { type: "builtin", builtin: "upload_artifact", targets: "all" },
-];
-
-function translateSetupLinker(baseIf?: string): Step[] {
-  const steps: Step[] = [
+/**
+ * Translates the setup_linker builtin into a single, robust step.
+ */
+function translateSetupLinker(baseIf?: string): GitHubStep[] {
+  const steps: GitHubStep[] = [
     {
-      name: "Setup Linker",
-      uses: Actions.setupLinker,
-      with: {
-        "target-triple": "${{ matrix.target_triple }}",
-        "extra-apt-packages": "${{ join(matrix.apt_packages, ' ') }}",
-      },
+      name: "Configure Linker and System Dependencies",
+      if: baseIf
+        ? `(matrix.apt_packages[0] != null || matrix.linker_env[0] != null) && (${baseIf})`
+        : "matrix.apt_packages[0] != null || matrix.linker_env[0] != null",
+      run: [
+        "PKGS=\"${{ join(matrix.apt_packages, ' ') }}\"",
+        'if [ -n "$PKGS" ] && [ "${{ runner.os }}" = "Linux" ]; then',
+        "  sudo apt-get update && sudo apt-get install --no-install-recommends -y $PKGS",
+        "fi",
+        "",
+        'for env_var in "${{ join(matrix.linker_env, \'" "\') }}"; do',
+        '  if [ -n "$env_var" ]; then',
+        '    echo "$env_var" >> "$GITHUB_ENV"',
+        "  fi",
+        "done",
+      ].join("\n"),
+      shell: "bash",
     },
     {
       name: "Install System Dependencies (Windows) [WiX]",
@@ -93,182 +95,127 @@ if ($wixDir -and (Test-Path "$($wixDir.FullName)\\bin\\candle.exe")) {
   return steps;
 }
 
-function translatePackage(baseIf?: string): Step[] {
-  const steps: Step[] = [];
+/**
+ * Translates the package builtin by delegating entirely to the Language Strategy.
+ */
+function translatePackage(
+  ctx: StrategyContext,
+  config: RefineryConfig,
+  baseIf?: string,
+): GitHubStep[] {
+  const steps: GitHubStep[] = [];
 
-  for (const pkg of ["deb", "rpm", "msi"] as const) {
-    const packager = PACKAGERS[pkg];
-    if (packager) {
-      for (const ps of packager.setupSteps) {
-        const s: Step = { name: ps.name };
-        if (ps.uses) {
-          s.uses = ps.uses;
-        }
-        if (ps.run) {
-          s.run = ps.run;
-        }
-        if (ps.shell) {
-          s.shell = ps.shell;
-        }
-        if (ps.with) {
-          s.with = ps.with;
-        }
-        if (ps.ifCondition) {
-          s.if = ps.ifCondition;
-        }
-        steps.push(s);
-      }
-      for (const ps of packager.buildSteps) {
-        const s: Step = { name: ps.name };
-        if (ps.uses) {
-          s.uses = ps.uses;
-        }
-        if (ps.run) {
-          s.run = ps.run;
-        }
-        if (ps.shell) {
-          s.shell = ps.shell;
-        }
-        if (ps.with) {
-          s.with = ps.with;
-        }
-        if (ps.ifCondition) {
-          s.if = ps.ifCondition;
-        }
-        steps.push(s);
-      }
-    }
+  for (const s of ctx.lang.getExportSteps(ctx, GHA_TARGET)) {
+    // Skip package/upload_artifact builtins to avoid recursion
+    if (s.type === "builtin" && (s.builtin === "package" || s.builtin === "upload_artifact"))
+      continue;
+    steps.push(...translateAbstractStep(ctx, s, config, baseIf));
   }
 
-  // Export and packaging steps
-  for (const ps of steps) {
-    if (baseIf) {
-      if (ps.if) {
-        ps.if = `(${ps.if}) && (${baseIf})`;
-      } else {
-        ps.if = baseIf;
-      }
-    }
-  }
   return steps;
+}
+
+/**
+ * Combines a step's own `if` condition with a base `if` from the caller.
+ */
+function mergeIf(stepIf: string | undefined, baseIf: string | undefined): string | undefined {
+  if (baseIf) {
+    return stepIf ? `(${stepIf}) && (${baseIf})` : baseIf;
+  }
+  return stepIf;
 }
 
 function translateAbstractStep(
   ctx: StrategyContext,
   step: AbstractStep,
-  _config: RefineryConfig,
+  config: RefineryConfig,
   baseIf?: string,
-): Step[] {
+): GitHubStep[] {
   if (step.type === "shell") {
-    const s: Step = {
+    const s: GitHubStep = {
       name: step.name,
-      run: step.run,
+      run: Array.isArray(step.run) ? step.run.join("\n") : step.run,
+      shell: step.shell,
+      env: step.env,
+      if: mergeIf(step.if, baseIf),
     };
-    if (step.shell) {
-      s.shell = step.shell;
-    }
-    if (step.env) {
-      s.env = step.env;
-    }
-    if (step.if) {
-      s.if = step.if;
-    }
-
-    if (baseIf) {
-      s.if = s.if ? `(${s.if}) && (${baseIf})` : baseIf;
-    }
     return [s];
   }
 
   if (step.type === "action" || (step as any).type === "composite") {
-    const s: Step = {
-      name:
-        step.type === "action"
-          ? step.name
-          : ((step as any).name ?? ((step as any).action ? `Execute ${(step as any).action}` : "")),
+    const s: GitHubStep = {
+      name: (step as any).name ?? "Execute Action",
       uses: step.type === "action" ? step.uses : `./.github/actions/${(step as any).action}`,
+      with: step.with as Record<string, string | boolean | number>,
+      env: (step as any).env,
+      if: mergeIf((step as any).if, baseIf),
     };
-
-    if (step.with) {
-      s.with = step.with as Record<string, string | boolean | number>;
-    }
-    if ((step as any).env) {
-      s.env = (step as any).env;
-    }
-    if ((step as any).if) {
-      s.if = (step as any).if;
-    }
-
-    if ((step as any).secrets && Array.isArray((step as any).secrets)) {
-      s.env = s.env || {};
-      for (const secret of (step as any).secrets) {
-        s.env[secret] = `\${{ secrets.${secret} }}`;
-      }
-    }
-
-    if (baseIf) {
-      s.if = s.if ? `(${s.if}) && (${baseIf})` : baseIf;
-    }
     return [s];
   }
 
   if (step.type === "builtin") {
     switch (step.builtin) {
-      case "checkout": {
-        const s: Step = {
-          name: "Checkout",
-          uses: Actions.checkout,
-        };
-        if (baseIf) {
-          s.if = baseIf;
-        }
-        return [s];
-      }
+      case "checkout":
+        return [{ name: "Checkout", uses: Actions.checkout, if: baseIf }];
+
       case "setup_toolchain": {
-        const langSetupSteps = ctx.lang.getSetupSteps(ctx, GHA_TARGET);
-        const steps: Step[] = [];
-        for (const s of langSetupSteps) {
-          // If it's the main toolchain setup, we might want to preserve some defaults
-          if (s.type === "builtin" && s.builtin === "setup_toolchain") {
-            const stepObj: Step = {
-              name: s.name ?? step.name ?? "Setup Toolchain",
-              uses: Actions.setupRust,
-              with: {
-                target: "${{ matrix.target_triple }}",
-                cache: true,
-                ...(s.with ?? {}),
-                ...(step.with ?? {}),
-              },
-            };
-            if (baseIf) {
-              stepObj.if = baseIf;
-            }
-            steps.push(stepObj);
-          } else {
-            steps.push(...translateAbstractStep(ctx, s, _config, baseIf));
-          }
-        }
-        return steps;
-      }
-      case "setup_linker":
-        return translateSetupLinker(baseIf);
-      case "package":
-        return translatePackage(baseIf);
-      case "upload_artifact": {
-        const s: Step = {
-          name: "Upload Artifact",
-          uses: Actions.uploadArtifact,
+        const results: GitHubStep[] = [];
+        // Add Rust toolchain setup
+        results.push({
+          name: step.name || "Setup Rust",
+          uses: Actions.setupRust,
+          if: baseIf,
           with: {
-            name: "${{ matrix.output_name }}",
-            path: "_packages/",
+            target: "${{ matrix.target_triple }}",
+            cache: true,
+            toolchain: (config as any).toolchain || "stable",
             ...(step.with ?? {}),
           },
-        };
-        if (baseIf) {
-          s.if = baseIf;
+        });
+        // Add language-specific setup steps (e.g. cbindgen via install_tool)
+        const langSetup = ctx.lang.getSetupSteps(ctx, GHA_TARGET);
+        for (const s of langSetup) {
+          // Skip setup builtins to avoid infinite recursion
+          if (
+            s.type === "builtin" &&
+            (s.builtin === "setup_toolchain" || s.builtin === "setup_linker")
+          )
+            continue;
+          results.push(...translateAbstractStep(ctx, s, config, baseIf));
         }
-        return [s];
+        return results;
       }
+
+      case "setup_linker":
+        return translateSetupLinker(baseIf);
+
+      case "install_tool":
+        return [
+          {
+            name: step.name || `Install ${step.with?.tool}`,
+            uses: Actions.installAction,
+            if: mergeIf(step.if, baseIf),
+            with: step.with as Record<string, string | boolean | number>,
+          },
+        ];
+
+      case "package":
+        return translatePackage(ctx, config, baseIf);
+
+      case "upload_artifact":
+        return [
+          {
+            name: "Upload Artifact",
+            uses: Actions.uploadArtifact,
+            if: baseIf,
+            with: {
+              name: "${{ matrix.output_name }}",
+              path: "_packages/",
+              ...(step.with ?? {}),
+            },
+          },
+        ];
+
       default:
         return [];
     }
@@ -277,131 +224,96 @@ function translateAbstractStep(
   return [];
 }
 
-function getMatchingTriples(
-  targetIds: string[],
-  config: RefineryConfig,
-  entries: ReturnType<typeof buildMatrix>,
-): string[] {
-  const matchingTriples: string[] = [];
-  for (const targetId of targetIds) {
-    const target = config.targets?.find((t) => t.id === targetId);
-    if (target) {
-      for (const arch of target.arch) {
-        const entry = entries.find(
-          (e) =>
-            e.artifact === target.for &&
-            e.os === target.os &&
-            e.arch === arch &&
-            e.abi === target.abi,
-        );
-        if (entry) {
-          matchingTriples.push(entry.target_triple);
-        }
-      }
-    }
-  }
-  return matchingTriples;
-}
-
-function getTargetsCondition(
-  targets: "once" | "all" | string[],
-  config: RefineryConfig,
-  entries: ReturnType<typeof buildMatrix>,
-): string | undefined {
-  let result: string | undefined;
-  if (targets === "once") {
-    const firstTriple = entries[0]?.target_triple;
-    if (firstTriple) {
-      result = `matrix.target_triple == '${firstTriple}'`;
-    }
-  } else if (Array.isArray(targets)) {
-    const triples = getMatchingTriples(targets, config, entries);
-    if (triples.length > 0) {
-      result = triples.map((t) => `matrix.target_triple == '${t}'`).join(" || ");
-    }
-  }
-  return result;
-}
-
 function getStepIfCondition(
   step: PreBuildStep | PostBuildStep,
   config: RefineryConfig,
 ): string | undefined {
   const targets = step.targets ?? "once";
-  if (targets === "all") {
-    return;
-  }
+  if (targets === "all") return undefined;
 
   const entries = buildMatrix(config);
-  if (entries.length === 0) {
-    return;
+  if (entries.length === 0) return undefined;
+
+  if (targets === "once") {
+    const firstTriple = entries[0]?.target_triple;
+    return firstTriple ? `matrix.target_triple == '${firstTriple}'` : undefined;
   }
 
-  return getTargetsCondition(targets, config, entries);
+  if (Array.isArray(targets)) {
+    const matchingTriples: string[] = [];
+    for (const targetId of targets) {
+      const target = config.targets?.find((t) => t.id === targetId);
+      if (!target) continue;
+      for (const arch of target.arch) {
+        const entry = entries.find(
+          (e) => e.artifact === target.for && e.os === target.os && e.arch === arch,
+        );
+        if (entry) matchingTriples.push(entry.target_triple);
+      }
+    }
+    return matchingTriples.length > 0
+      ? matchingTriples.map((t) => `matrix.target_triple == '${t}'`).join(" || ")
+      : undefined;
+  }
+
+  return undefined;
 }
 
-export function buildSteps(ctx: StrategyContext): Step[] {
-  const steps: Step[] = [];
+/**
+ * Generates the GitHub Actions workflow steps.
+ * Delegates entirely to the Language Strategy for build/export logic.
+ */
+export function buildSteps(ctx: StrategyContext): GitHubStep[] {
   const { config, lang } = ctx;
+  const steps: GitHubStep[] = [];
 
-  let preBuildSteps = defaultPreBuild;
-  if (config.pre_build && config.pre_build.length > 0) {
-    preBuildSteps = config.pre_build;
+  // 1. Mandatory Core Setup
+  steps.push(...translateAbstractStep(ctx, { type: "builtin", builtin: "checkout" }, config));
+  steps.push(
+    ...translateAbstractStep(ctx, { type: "builtin", builtin: "setup_toolchain" }, config),
+  );
+  steps.push(...translateAbstractStep(ctx, { type: "builtin", builtin: "setup_linker" }, config));
+
+  // 2. Pre-build Hooks
+  if (config.pre_build) {
+    for (const s of config.pre_build) {
+      if (s.enabled === false || s.type === "builtin") continue;
+      steps.push(
+        ...translateAbstractStep(
+          ctx,
+          s as unknown as AbstractStep,
+          config,
+          getStepIfCondition(s, config),
+        ),
+      );
+    }
   }
 
-  for (const step of preBuildSteps) {
-    if (step.enabled === false) {
-      continue;
-    }
-
-    const baseIf = getStepIfCondition(step, config);
-    if (step.type === "builtin") {
-      // For builtins, we let the strategy provide setup/build/export steps if needed,
-      // but here we are translating the pre_build/post_build blocks from the manifest.
-      // If it's a builtin in the manifest, we use our local translation.
-      steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
-    } else {
-      steps.push(...translateAbstractStep(ctx, step as unknown as AbstractStep, config, baseIf));
-    }
-  }
-
-  // Compilation steps from Language Strategy
-  const langBuildSteps = lang.getBuildSteps(ctx, GHA_TARGET);
-  for (const s of langBuildSteps) {
+  // 3. Main Build
+  for (const s of lang.getBuildSteps(ctx, GHA_TARGET)) {
     steps.push(...translateAbstractStep(ctx, s, config));
   }
 
-  let postBuildSteps = defaultPostBuild;
-  if (config.post_build && config.post_build.length > 0) {
-    postBuildSteps = config.post_build;
-  }
-
-  for (const step of postBuildSteps) {
-    if (step.enabled === false) {
-      continue;
-    }
-
-    const baseIf = getStepIfCondition(step, config);
-    if (step.type === "builtin") {
-      // Special case: "package" builtin should also include Lang's ExportSteps
-      if (step.builtin === "package") {
-        const langExportSteps = lang.getExportSteps(ctx, GHA_TARGET);
-        for (const s of langExportSteps) {
-          // Filter out builtins from ExportSteps that we are already handling here
-          if (
-            s.type === "builtin" &&
-            (s.builtin === "package" || s.builtin === "upload_artifact")
-          ) {
-            continue;
-          }
-          steps.push(...translateAbstractStep(ctx, s, config, baseIf));
-        }
-      }
-      steps.push(...translateAbstractStep(ctx, { ...step } as AbstractStep, config, baseIf));
-    } else {
-      steps.push(...translateAbstractStep(ctx, step as unknown as AbstractStep, config, baseIf));
+  // 4. Post-build Hooks
+  if (config.post_build) {
+    for (const s of config.post_build) {
+      if (s.enabled === false || s.type === "builtin") continue;
+      steps.push(
+        ...translateAbstractStep(
+          ctx,
+          s as unknown as AbstractStep,
+          config,
+          getStepIfCondition(s, config),
+        ),
+      );
     }
   }
+
+  // 5. Finalize Packaging & Upload
+  steps.push(...translateAbstractStep(ctx, { type: "builtin", builtin: "package" }, config));
+  steps.push(
+    ...translateAbstractStep(ctx, { type: "builtin", builtin: "upload_artifact" }, config),
+  );
 
   return steps;
 }

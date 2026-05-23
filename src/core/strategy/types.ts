@@ -23,9 +23,16 @@ export interface StrategyContext {
 export type AbstractStep =
   | {
       type: "builtin";
-      builtin: "setup_toolchain" | "setup_linker" | "package" | "upload_artifact" | "checkout";
+      builtin:
+        | "setup_toolchain"
+        | "setup_linker"
+        | "package"
+        | "upload_artifact"
+        | "checkout"
+        | "install_tool";
       name?: string;
       with?: Record<string, string | number | boolean>;
+      if?: string;
     }
   | {
       type: "shell";

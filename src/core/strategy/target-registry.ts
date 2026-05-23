@@ -9,7 +9,6 @@ export interface TargetInfo {
   os: (typeof Os)[keyof typeof Os];
   arch: (typeof Arch)[keyof typeof Arch];
   abi?: string;
-  runsOn: string;
   linker?: string;
   aptPackages: string[];
   linkerEnv?: Record<string, string>;
@@ -22,7 +21,6 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "x86_64",
     abi: "gnu",
-    runsOn: "ubuntu-latest",
     aptPackages: [],
   },
   {
@@ -30,7 +28,6 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "x86_64",
     abi: "musl",
-    runsOn: "ubuntu-latest",
     aptPackages: ["musl-tools"],
     linkerEnv: {
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: "musl-gcc",
@@ -41,7 +38,6 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "arm64",
     abi: "gnu",
-    runsOn: "ubuntu-24.04-arm",
     linker: "aarch64-linux-gnu-gcc",
     aptPackages: ["gcc-aarch64-linux-gnu"],
     linkerEnv: {
@@ -53,7 +49,6 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "arm64",
     abi: "musl",
-    runsOn: "ubuntu-24.04-arm",
     linker: "aarch64-linux-gnu-gcc",
     aptPackages: ["gcc-aarch64-linux-gnu", "musl-tools"],
     linkerEnv: {
@@ -65,10 +60,20 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "x86",
     abi: "gnu",
-    runsOn: "ubuntu-latest",
     aptPackages: ["gcc-multilib"],
     linkerEnv: {
       CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER: "gcc",
+      RUSTFLAGS: "-C link-arg=-m32",
+    },
+  },
+  {
+    triple: "i686-unknown-linux-musl",
+    os: "linux",
+    arch: "x86",
+    abi: "musl",
+    aptPackages: ["gcc-multilib", "musl-tools"],
+    linkerEnv: {
+      CARGO_TARGET_I686_UNKNOWN_LINUX_MUSL_LINKER: "musl-gcc",
       RUSTFLAGS: "-C link-arg=-m32",
     },
   },
@@ -77,7 +82,6 @@ const TARGETS: TargetInfo[] = [
     os: "linux",
     arch: "armv7",
     abi: "gnueabihf",
-    runsOn: "ubuntu-latest",
     linker: "arm-linux-gnueabihf-gcc",
     aptPackages: ["gcc-arm-linux-gnueabihf"],
     linkerEnv: {
@@ -88,7 +92,6 @@ const TARGETS: TargetInfo[] = [
     triple: "wasm32-unknown-unknown",
     os: "linux",
     arch: "wasm32",
-    runsOn: "ubuntu-latest",
     aptPackages: [],
   },
 
@@ -97,21 +100,18 @@ const TARGETS: TargetInfo[] = [
     triple: "x86_64-apple-darwin",
     os: "macos",
     arch: "x86_64",
-    runsOn: "macos-latest",
     aptPackages: [],
   },
   {
     triple: "aarch64-apple-darwin",
     os: "macos",
     arch: "arm64",
-    runsOn: "macos-latest",
     aptPackages: [],
   },
   {
     triple: "wasm32-unknown-unknown",
     os: "macos",
     arch: "wasm32",
-    runsOn: "macos-latest",
     aptPackages: [],
   },
 
@@ -121,7 +121,6 @@ const TARGETS: TargetInfo[] = [
     os: "windows",
     arch: "x86_64",
     abi: "msvc",
-    runsOn: "windows-latest",
     aptPackages: [],
   },
   {
@@ -129,7 +128,6 @@ const TARGETS: TargetInfo[] = [
     os: "windows",
     arch: "x86_64",
     abi: "gnu",
-    runsOn: "windows-latest",
     linker: "x86_64-w64-mingw32-gcc",
     aptPackages: [],
     linkerEnv: {
@@ -141,7 +139,6 @@ const TARGETS: TargetInfo[] = [
     os: "windows",
     arch: "arm64",
     abi: "msvc",
-    runsOn: "windows-11-arm",
     aptPackages: [],
   },
   {
@@ -149,7 +146,6 @@ const TARGETS: TargetInfo[] = [
     os: "windows",
     arch: "x86",
     abi: "msvc",
-    runsOn: "windows-latest",
     aptPackages: [],
   },
   {
@@ -157,7 +153,6 @@ const TARGETS: TargetInfo[] = [
     os: "windows",
     arch: "x86",
     abi: "gnu",
-    runsOn: "windows-latest",
     linker: "i686-w64-mingw32-gcc",
     aptPackages: [],
     linkerEnv: {
@@ -168,7 +163,6 @@ const TARGETS: TargetInfo[] = [
     triple: "wasm32-unknown-unknown",
     os: "windows",
     arch: "wasm32",
-    runsOn: "windows-latest",
     aptPackages: [],
   },
 ];

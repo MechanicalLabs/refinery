@@ -36,13 +36,11 @@ export const rustStrategy: LanguageStrategy = {
 
     if (target.headers) {
       steps.push({
-        type: "action",
+        type: "builtin",
+        builtin: "install_tool",
         name: "Install cbindgen",
         if: "matrix.headers == true",
-        uses: "taiki-e/install-action@v2",
-        with: {
-          tool: "cbindgen",
-        },
+        with: { tool: "cbindgen" },
       });
     }
 
@@ -204,16 +202,71 @@ export const rustStrategy: LanguageStrategy = {
       shell: "bash",
     });
 
-    // Packaging (builtin call for deb, rpm, msi)
+    // Platform-specific packagers (install via generic builtin, build via shell)
+
+    // .deb
     steps.push({
       type: "builtin",
-      builtin: "package",
+      builtin: "install_tool",
+      name: "Install cargo-deb",
+      with: { tool: "cargo-deb" },
+      if: "${{ matrix.has_deb }}",
+    });
+    steps.push({
+      type: "shell",
+      name: "Build .deb package",
+      if: "${{ matrix.has_deb }}",
+      run: [
+        "mkdir -p _packages",
+        `cargo deb --target ${target.triple} --no-build -o _packages/`,
+        "for f in _packages/*.deb; do",
+        `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.deb"`,
+        "done",
+      ].join("\n"),
+      shell: "bash",
     });
 
-    // Upload (builtin call)
+    // .rpm
     steps.push({
       type: "builtin",
-      builtin: "upload_artifact",
+      builtin: "install_tool",
+      name: "Install cargo-generate-rpm",
+      with: { tool: "cargo-generate-rpm" },
+      if: "${{ matrix.has_rpm }}",
+    });
+    steps.push({
+      type: "shell",
+      name: "Build .rpm package",
+      if: "${{ matrix.has_rpm }}",
+      run: [
+        "mkdir -p _packages",
+        "cargo generate-rpm -o _packages/",
+        "for f in _packages/*.rpm; do",
+        `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.rpm"`,
+        "done",
+      ].join("\n"),
+      shell: "bash",
+    });
+
+    // .msi
+    steps.push({
+      type: "builtin",
+      builtin: "install_tool",
+      name: "Install cargo-wix",
+      with: { tool: "cargo-wix" },
+      if: "${{ matrix.has_msi }}",
+    });
+    steps.push({
+      type: "shell",
+      name: "Build .msi package",
+      if: "${{ matrix.has_msi }}",
+      run: [
+        "mkdir -p _packages",
+        `cargo wix --target ${target.triple} -o _packages/`,
+        `$msi = Get-ChildItem "_packages\\*.msi" | Select-Object -First 1`,
+        `if ($msi) { Rename-Item -Path $msi.FullName -NewName "${target.outputName}.msi" }`,
+      ].join("\n"),
+      shell: "pwsh",
     });
 
     return steps;

@@ -25,6 +25,7 @@ export const CommonLibraryArtifact = z
   .object({
     type: z.literal("lib"),
     name: NameSchema,
+    outputName: z.string().min(1).optional(),
     headers: z.boolean().optional().default(false),
   })
   .strict();
