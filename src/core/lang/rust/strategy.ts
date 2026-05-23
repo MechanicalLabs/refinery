@@ -63,11 +63,70 @@ export const rustStrategy: LanguageStrategy = {
 
     return steps;
   },
-  getExportSteps: (_ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
+  getExportSteps: (ctx: StrategyContext, target: TargetMetadata): AbstractStep[] => {
     const steps: AbstractStep[] = [];
+    const isGha = target.triple.includes("matrix");
 
-    // Preparation
-    if (target.artifactType === "bin") {
+    // 1. Preparation
+    if (isGha) {
+      steps.push({
+        type: "shell",
+        name: "Prepare Binary",
+        if: "matrix.artifact_type == 'bin'",
+        run: [
+          `SRC="target/\${{ matrix.target_triple }}/release/\${{ matrix.artifact_bin }}\${{ matrix.bin_ext }}"`,
+          `DST_ORIG="target/release/\${{ matrix.artifact_bin }}\${{ matrix.bin_ext }}"`,
+          `DST_RENAMED="target/release/\${{ matrix.output_name }}\${{ matrix.bin_ext }}"`,
+          "",
+          "mkdir -p target/release",
+          'cp "$SRC" "$DST_ORIG"',
+          'cp "$SRC" "$DST_RENAMED"',
+        ].join("\n"),
+        shell: "bash",
+      });
+
+      steps.push({
+        type: "shell",
+        name: "Prepare Library",
+        if: "matrix.artifact_type == 'lib'",
+        run: [
+          `SRCDIR="target/\${{ matrix.target_triple }}/release"`,
+          'DSTDIR="target/release"',
+          'mkdir -p "$DSTDIR"',
+          "",
+          "copy_lib() {",
+          '  local src_file="$1"',
+          '  local dst_orig_file="$2"',
+          '  local dst_renamed_file="$3"',
+          '  if [ -f "$src_file" ]; then',
+          '    cp "$src_file" "$DSTDIR/$dst_orig_file"',
+          '    cp "$src_file" "$DSTDIR/$dst_renamed_file"',
+          "  fi",
+          "}",
+          "",
+          `NAME="\${{ matrix.artifact_bin }}"`,
+          `OUT="\${{ matrix.output_name }}"`,
+          "",
+          'copy_lib "$SRCDIR/lib${NAME}.so" "lib${NAME}.so" "lib${OUT}.so"',
+          'copy_lib "$SRCDIR/lib${NAME}.dylib" "lib${NAME}.dylib" "lib${OUT}.dylib"',
+          'copy_lib "$SRCDIR/lib${NAME}.a" "lib${NAME}.a" "lib${OUT}.a"',
+          'copy_lib "$SRCDIR/${NAME}.dll" "${NAME}.dll" "${OUT}.dll"',
+          'copy_lib "$SRCDIR/${NAME}.lib" "${NAME}.lib" "${OUT}.lib"',
+          'copy_lib "$SRCDIR/lib${NAME}.dll.a" "lib${NAME}.dll.a" "lib${OUT}.dll.a"',
+          'copy_lib "$SRCDIR/${NAME}.wasm" "${NAME}.wasm" "${OUT}.wasm"',
+          "",
+          'if [ "${{ matrix.headers }}" = "true" ]; then',
+          '  if [ -f "cbindgen.toml" ]; then',
+          '    cbindgen --config cbindgen.toml --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
+          "  else",
+          '    cbindgen --crate "${NAME}" --output "$DSTDIR/${OUT}.h"',
+          "  fi",
+          '  cp "$DSTDIR/${OUT}.h" "$DSTDIR/${NAME}.h"',
+          "fi",
+        ].join("\n"),
+        shell: "bash",
+      });
+    } else if (target.artifactType === "bin") {
       steps.push({
         type: "shell",
         name: "Prepare Binary",
@@ -134,140 +193,213 @@ export const rustStrategy: LanguageStrategy = {
       });
     }
 
-    // Export Binary/Library to _packages
-    steps.push({
-      type: "shell",
-      name: "Export Binary",
-      if: "matrix.artifact_type == 'bin'",
-      run: `mkdir -p _packages\ncp "target/release/${target.outputName}${target.binExt}" "_packages/"`,
-      shell: "bash",
-    });
+    // 2. Export (Export Binary / Export Library)
+    if (isGha) {
+      steps.push({
+        type: "shell",
+        name: "Export Binary",
+        if: "matrix.artifact_type == 'bin'",
+        run: `mkdir -p _packages\ncp "target/release/\${{ matrix.output_name }}\${{ matrix.bin_ext }}" "_packages/"`,
+        shell: "bash",
+      });
 
-    steps.push({
-      type: "shell",
-      name: "Export Library",
-      if: "matrix.artifact_type == 'lib'",
-      run: `mkdir -p _packages\ncp target/release/lib${target.outputName}.* _packages/ 2>/dev/null || true\ncp target/release/${target.outputName}.* _packages/ 2>/dev/null || true`,
-      shell: "bash",
-    });
+      steps.push({
+        type: "shell",
+        name: "Export Library",
+        if: "matrix.artifact_type == 'lib'",
+        run: "mkdir -p _packages\ncp target/release/lib${{ matrix.output_name }}.* _packages/ 2>/dev/null || true\ncp target/release/${{ matrix.output_name }}.* _packages/ 2>/dev/null || true",
+        shell: "bash",
+      });
+    } else if (target.artifactType === "bin") {
+      steps.push({
+        type: "shell",
+        name: "Export Binary",
+        run: `mkdir -p _packages\ncp "target/release/${target.outputName}${target.binExt}" "_packages/"`,
+        shell: "bash",
+      });
+    } else {
+      steps.push({
+        type: "shell",
+        name: "Export Library",
+        run: `mkdir -p _packages\ncp target/release/lib${target.outputName}.* _packages/ 2>/dev/null || true\ncp target/release/${target.outputName}.* _packages/ 2>/dev/null || true`,
+        shell: "bash",
+      });
+    }
 
-    // Package Binary
-    steps.push({
-      type: "shell",
-      name: "Package Binary",
-      if: "matrix.artifact_type == 'bin'",
-      run: [
-        'ARCHIVE_DIR="${PWD}/_packages"',
-        'mkdir -p "$ARCHIVE_DIR"',
-        `STAGING_DIR="target/archive_staging/${target.outputName}"`,
-        'mkdir -p "$STAGING_DIR"',
-        `cp "target/release/${target.outputName}${target.binExt}" "$STAGING_DIR/"`,
-        `for f in ${target.includeFiles.join(" ")}; do`,
-        '  if [ -f "$f" ]; then',
-        '    cp "$f" "$STAGING_DIR/"',
-        "  fi",
-        "done",
-        'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
-        `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${target.outputName}.zip" .) > /dev/null`,
-        "else",
-        `  tar -czf "$ARCHIVE_DIR/${target.outputName}.tar.gz" -C "$STAGING_DIR" .`,
-        "fi",
-      ].join("\n"),
-      shell: "bash",
-    });
+    // 3. Packaging (Package Binary / Package Library)
+    if (isGha) {
+      steps.push({
+        type: "shell",
+        name: "Package Binary",
+        if: "matrix.artifact_type == 'bin'",
+        run: [
+          'ARCHIVE_DIR="${PWD}/_packages"',
+          'mkdir -p "$ARCHIVE_DIR"',
+          `STAGING_DIR="target/archive_staging/\${{ matrix.output_name }}"`,
+          'mkdir -p "$STAGING_DIR"',
+          `cp "target/release/\${{ matrix.output_name }}\${{ matrix.bin_ext }}" "$STAGING_DIR/"`,
+          `for f in \${{ join(matrix.include_files, ' ') }}; do`,
+          '  if [ -f "$f" ]; then',
+          '    cp "$f" "$STAGING_DIR/"',
+          "  fi",
+          "done",
+          'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
+          `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/\${{ matrix.output_name }}.zip" .) > /dev/null`,
+          "else",
+          `  tar -czf "$ARCHIVE_DIR/\${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .`,
+          "fi",
+        ].join("\n"),
+        shell: "bash",
+      });
 
-    // Package Library
-    steps.push({
-      type: "shell",
-      name: "Package Library",
-      if: "matrix.artifact_type == 'lib'",
-      run: [
-        'ARCHIVE_DIR="${PWD}/_packages"',
-        'mkdir -p "$ARCHIVE_DIR"',
-        `STAGING_DIR="target/archive_staging/${target.outputName}"`,
-        'mkdir -p "$STAGING_DIR"',
-        `cp target/release/lib${target.artifactBin}.* "$STAGING_DIR/" 2>/dev/null || true`,
-        `cp target/release/${target.artifactBin}.* "$STAGING_DIR/" 2>/dev/null || true`,
-        `for f in ${target.includeFiles.join(" ")}; do`,
-        '  if [ -f "$f" ]; then',
-        '    cp "$f" "$STAGING_DIR/"',
-        "  fi",
-        "done",
-        'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
-        `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${target.outputName}.zip" .) > /dev/null`,
-        "else",
-        `  tar -czf "$ARCHIVE_DIR/${target.outputName}.tar.gz" -C "$STAGING_DIR" .`,
-        "fi",
-      ].join("\n"),
-      shell: "bash",
-    });
+      steps.push({
+        type: "shell",
+        name: "Package Library",
+        if: "matrix.artifact_type == 'lib'",
+        run: [
+          'ARCHIVE_DIR="${PWD}/_packages"',
+          'mkdir -p "$ARCHIVE_DIR"',
+          `STAGING_DIR="target/archive_staging/\${{ matrix.output_name }}"`,
+          'mkdir -p "$STAGING_DIR"',
+          `cp target/release/lib\${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true`,
+          `cp target/release/\${{ matrix.artifact_bin }}.* "$STAGING_DIR/" 2>/dev/null || true`,
+          `for f in \${{ join(matrix.include_files, ' ') }}; do`,
+          '  if [ -f "$f" ]; then',
+          '    cp "$f" "$STAGING_DIR/"',
+          "  fi",
+          "done",
+          'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
+          `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/\${{ matrix.output_name }}.zip" .) > /dev/null`,
+          "else",
+          `  tar -czf "$ARCHIVE_DIR/\${{ matrix.output_name }}.tar.gz" -C "$STAGING_DIR" .`,
+          "fi",
+        ].join("\n"),
+        shell: "bash",
+      });
+    } else if (target.artifactType === "bin") {
+      steps.push({
+        type: "shell",
+        name: "Package Binary",
+        run: [
+          'ARCHIVE_DIR="${PWD}/_packages"',
+          'mkdir -p "$ARCHIVE_DIR"',
+          `STAGING_DIR="target/archive_staging/${target.outputName}"`,
+          'mkdir -p "$STAGING_DIR"',
+          `cp "target/release/${target.outputName}${target.binExt}" "$STAGING_DIR/"`,
+          `for f in ${target.includeFiles.join(" ")}; do`,
+          '  if [ -f "$f" ]; then',
+          '    cp "$f" "$STAGING_DIR/"',
+          "  fi",
+          "done",
+          'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
+          `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${target.outputName}.zip" .) > /dev/null`,
+          "else",
+          `  tar -czf "$ARCHIVE_DIR/${target.outputName}.tar.gz" -C "$STAGING_DIR" .`,
+          "fi",
+        ].join("\n"),
+        shell: "bash",
+      });
+    } else {
+      steps.push({
+        type: "shell",
+        name: "Package Library",
+        run: [
+          'ARCHIVE_DIR="${PWD}/_packages"',
+          'mkdir -p "$ARCHIVE_DIR"',
+          `STAGING_DIR="target/archive_staging/${target.outputName}"`,
+          'mkdir -p "$STAGING_DIR"',
+          `cp target/release/lib${target.artifactBin}.* "$STAGING_DIR/" 2>/dev/null || true`,
+          `cp target/release/${target.artifactBin}.* "$STAGING_DIR/" 2>/dev/null || true`,
+          `for f in ${target.includeFiles.join(" ")}; do`,
+          '  if [ -f "$f" ]; then',
+          '    cp "$f" "$STAGING_DIR/"',
+          "  fi",
+          "done",
+          'if [ "${{ matrix.package_type }}" = "zip" ] || [ "${{ matrix.os }}" = "windows" ]; then',
+          `  (cd "$STAGING_DIR" && 7z a -tzip "$ARCHIVE_DIR/${target.outputName}.zip" .) > /dev/null`,
+          "else",
+          `  tar -czf "$ARCHIVE_DIR/${target.outputName}.tar.gz" -C "$STAGING_DIR" .`,
+          "fi",
+        ].join("\n"),
+        shell: "bash",
+      });
+    }
 
-    // Platform-specific packagers (install via generic builtin, build via shell)
+    // 4. Platform-specific packagers
+    const hasPackage = (pkg: string): boolean => {
+      if (isGha) {
+        return ctx.config.targets?.some((t) => t.packages?.includes(pkg)) ?? false;
+      }
+      return target.packages.includes(pkg);
+    };
 
-    // .deb
-    steps.push({
-      type: "builtin",
-      builtin: "install_tool",
-      name: "Install cargo-deb",
-      with: { tool: "cargo-deb" },
-      if: "${{ matrix.has_deb }}",
-    });
-    steps.push({
-      type: "shell",
-      name: "Build .deb package",
-      if: "${{ matrix.has_deb }}",
-      run: [
-        "mkdir -p _packages",
-        `cargo deb --target ${target.triple} --no-build -o _packages/`,
-        "for f in _packages/*.deb; do",
-        `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.deb"`,
-        "done",
-      ].join("\n"),
-      shell: "bash",
-    });
+    if (hasPackage("deb")) {
+      steps.push({
+        type: "builtin",
+        builtin: "install_tool",
+        name: "Install cargo-deb",
+        with: { tool: "cargo-deb" },
+        if: isGha ? "${{ matrix.has_deb }}" : undefined,
+      });
+      steps.push({
+        type: "shell",
+        name: "Build .deb package",
+        if: isGha ? "${{ matrix.has_deb }}" : undefined,
+        run: [
+          "mkdir -p _packages",
+          `cargo deb --target ${target.triple} --no-build -o _packages/`,
+          "for f in _packages/*.deb; do",
+          `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.deb"`,
+          "done",
+        ].join("\n"),
+        shell: "bash",
+      });
+    }
 
-    // .rpm
-    steps.push({
-      type: "builtin",
-      builtin: "install_tool",
-      name: "Install cargo-generate-rpm",
-      with: { tool: "cargo-generate-rpm" },
-      if: "${{ matrix.has_rpm }}",
-    });
-    steps.push({
-      type: "shell",
-      name: "Build .rpm package",
-      if: "${{ matrix.has_rpm }}",
-      run: [
-        "mkdir -p _packages",
-        "cargo generate-rpm -o _packages/",
-        "for f in _packages/*.rpm; do",
-        `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.rpm"`,
-        "done",
-      ].join("\n"),
-      shell: "bash",
-    });
+    if (hasPackage("rpm")) {
+      steps.push({
+        type: "builtin",
+        builtin: "install_tool",
+        name: "Install cargo-generate-rpm",
+        with: { tool: "cargo-generate-rpm" },
+        if: isGha ? "${{ matrix.has_rpm }}" : undefined,
+      });
+      steps.push({
+        type: "shell",
+        name: "Build .rpm package",
+        if: isGha ? "${{ matrix.has_rpm }}" : undefined,
+        run: [
+          "mkdir -p _packages",
+          "cargo generate-rpm -o _packages/",
+          "for f in _packages/*.rpm; do",
+          `  [ -f "$f" ] && mv "$f" "_packages/${target.outputName}.rpm"`,
+          "done",
+        ].join("\n"),
+        shell: "bash",
+      });
+    }
 
-    // .msi
-    steps.push({
-      type: "builtin",
-      builtin: "install_tool",
-      name: "Install cargo-wix",
-      with: { tool: "cargo-wix" },
-      if: "${{ matrix.has_msi }}",
-    });
-    steps.push({
-      type: "shell",
-      name: "Build .msi package",
-      if: "${{ matrix.has_msi }}",
-      run: [
-        "mkdir -p _packages",
-        `cargo wix --target ${target.triple} -o _packages/`,
-        `$msi = Get-ChildItem "_packages\\*.msi" | Select-Object -First 1`,
-        `if ($msi) { Rename-Item -Path $msi.FullName -NewName "${target.outputName}.msi" }`,
-      ].join("\n"),
-      shell: "pwsh",
-    });
+    if (hasPackage("msi")) {
+      steps.push({
+        type: "builtin",
+        builtin: "install_tool",
+        name: "Install cargo-wix",
+        with: { tool: "cargo-wix" },
+        if: isGha ? "${{ matrix.has_msi }}" : undefined,
+      });
+      steps.push({
+        type: "shell",
+        name: "Build .msi package",
+        if: isGha ? "${{ matrix.has_msi }}" : undefined,
+        run: [
+          "mkdir -p _packages",
+          `cargo wix --target ${target.triple} -o _packages/`,
+          `$msi = Get-ChildItem "_packages\\*.msi" | Select-Object -First 1`,
+          `if ($msi) { Rename-Item -Path $msi.FullName -NewName "${target.outputName}.msi" }`,
+        ].join("\n"),
+        shell: "pwsh",
+      });
+    }
 
     return steps;
   },
