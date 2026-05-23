@@ -1,57 +1,43 @@
-# Refinery Architecture
+# Architecture
 
-Refinery is built with **TypeScript** on the **Bun** runtime. It prioritizes speed, type-safety, and a clean separation of concerns between orchestration logic and implementation details.
+Refinery is built as a modular orchestrator that decouples build logic from execution environments.
 
-## Core Design Patterns
+## System Components
 
-### 1. Strategy Pattern (The Engine)
-Refinery doesn't hardcode logic for specific languages or CI platforms. Instead, it uses a **Strategy Pattern**.
+### Command Registry
+The CLI entry point uses a registry-based system to manage commands. Each command implements a standard interface, allowing for consistent error handling and option parsing.
 
-*   **`LanguageStrategy`**: Handles toolchain detection, initialization, and build execution for specific languages (e.g., `RustStrategy`).
-*   **`PlatformStrategy`**: Handles the generation of CI-specific configuration files (e.g., `GitHubActionsStrategy`).
+### IO Layer
+The `core/io` module abstracts filesystem operations and manifest handling. It uses `smol-toml` for parsing and `zod` for strict schema validation of the `refinery.toml` file.
 
-These are registered in `src/core/strategy/registry.ts` and resolved at runtime based on the `refinery.toml`.
+### Strategy Pattern
+The core logic is divided into two primary strategy types:
 
-### 2. Command Pattern (The CLI)
-CLI commands are encapsulated objects registered in a central `CommandRegistry`. This keeps the entry point (`src/index.ts`) clean and makes it trivial to add new commands like `migrate` or `discover`.
+#### Language Strategy
+Defines how to build software for a specific programming language.
+- `getSetupSteps()`: Returns steps to prepare the compiler/toolchain.
+- `getBuildSteps()`: Returns the actual compilation commands.
+- `getExportSteps()`: Returns steps to organize output files and generate metadata (e.g., C headers).
 
-### 3. Functional Error Handling
-We use [ripthrow](https://github.com/MechanicalLabs/ripthrow) to manage errors.
-*   **No Exceptions:** We avoid `try/catch` for expected failures.
-*   **Result Types:** Functions return `AsyncResult` or `Result` types.
-*   **Explicit Mapping:** Errors are defined centrally in `src/errors.ts` and matched using `matchErr`.
+#### Platform Strategy
+Defines how to integrate with CI/CD providers.
+- `onInit()`: Handles platform-specific project initialization.
+- `migrate()`: Translates the Refinery manifest into platform-native configuration files (e.g., GitHub Actions YAML).
 
----
+### Target Registry
+A centralized database mapping operating systems, architectures, and ABIs to specific compilation parameters. This includes:
+- Target triples.
+- Specific linkers and environment variables (e.g., `CARGO_TARGET_..._LINKER`).
+- Required system packages (e.g., `musl-tools`).
 
-## Directory Structure
+## Error Handling
+Refinery utilizes the `ripthrow` library for functional error handling. Operations return `Result` or `AsyncResult` types, ensuring that all failure paths are explicitly handled or documented.
 
-```text
-src/
-├── cmd/                # CLI Command implementations
-│   ├── init.ts         # The project initialization wizard
-│   └── registry.ts     # Command discovery and registration
-├── core/
-│   ├── io/             # Filesystem and Manifest (TOML) operations
-│   ├── lang/           # Language-specific strategies (Rust, etc.)
-│   ├── platforms/      # CI-specific strategies (GitHub, etc.)
-│   ├── strategy/       # Strategy interfaces and Registry logic
-│   └── schema.ts       # Zod-backed refinery.toml definition
-├── ui/                 # CLI presentation layer (logs, prompts)
-├── utils/              # Shell execution and helpers
-└── errors.ts           # Central error definitions
-```
-
-## Data Flow: `refinery init`
-
-1.  **Discovery:** Refinery checks for existing manifests or language-specific files (like `Cargo.toml`).
-2.  **Interactive Prompt:** The `PromptGroup` orchestrates a series of steps to gather project metadata.
-3.  **Strategy Resolution:** Based on the user's choice, the `LanguageRegistry` and `PlatformRegistry` provide the necessary logic.
-4.  **Manifest Creation:** A `refinery.toml` is generated and validated against the Zod schema.
-5.  **Side Effects:** Strategies execute their `onInit` hooks (e.g., creating `.github/workflows/` or adding `.gitignore` entries).
-
----
-
-## Technical Debt & Focus
-
-*   **Current Focus:** Implementing the `migrate` command to generate real GitHub Action YAMLs.
-*   **Constraint:** Native-first. Avoid introducing dependencies on Docker or complex cross-compilation wrappers unless the `LanguageStrategy` explicitly requires them.
+## Built-in Actions
+The orchestrator includes built-in actions for common tasks:
+- `checkout`: Repository cloning.
+- `setup_toolchain`: Compiler installation and target addition.
+- `setup_linker`: Linker configuration and system dependency installation.
+- `package`: Artifact compression and package generation.
+- `upload_artifact` / `download_artifact`: Transferring files between CI jobs.
+- `github_release`: Automating GitHub releases.
