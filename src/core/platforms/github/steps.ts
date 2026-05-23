@@ -107,8 +107,9 @@ function translatePackage(
 
   for (const s of ctx.lang.getExportSteps(ctx, GHA_TARGET)) {
     // Skip package/upload_artifact builtins to avoid recursion
-    if (s.type === "builtin" && (s.builtin === "package" || s.builtin === "upload_artifact"))
+    if (s.type === "builtin" && (s.builtin === "package" || s.builtin === "upload_artifact")) {
       continue;
+    }
     steps.push(...translateAbstractStep(ctx, s, config, baseIf));
   }
 
@@ -179,8 +180,9 @@ function translateAbstractStep(
           if (
             s.type === "builtin" &&
             (s.builtin === "setup_toolchain" || s.builtin === "setup_linker")
-          )
+          ) {
             continue;
+          }
           results.push(...translateAbstractStep(ctx, s, config, baseIf));
         }
         return results;
@@ -192,7 +194,7 @@ function translateAbstractStep(
       case "install_tool":
         return [
           {
-            name: step.name || `Install ${step.with?.tool}`,
+            name: step.name || `Install ${(step.with as { tool?: string })?.tool}`,
             uses: Actions.installAction,
             if: mergeIf(step.if, baseIf),
             with: step.with as Record<string, string | boolean | number>,
@@ -229,10 +231,14 @@ function getStepIfCondition(
   config: RefineryConfig,
 ): string | undefined {
   const targets = step.targets ?? "once";
-  if (targets === "all") return undefined;
+  if (targets === "all") {
+    return undefined;
+  }
 
   const entries = buildMatrix(config);
-  if (entries.length === 0) return undefined;
+  if (entries.length === 0) {
+    return undefined;
+  }
 
   if (targets === "once") {
     const firstTriple = entries[0]?.target_triple;
@@ -243,12 +249,16 @@ function getStepIfCondition(
     const matchingTriples: string[] = [];
     for (const targetId of targets) {
       const target = config.targets?.find((t) => t.id === targetId);
-      if (!target) continue;
+      if (!target) {
+        continue;
+      }
       for (const arch of target.arch) {
         const entry = entries.find(
           (e) => e.artifact === target.for && e.os === target.os && e.arch === arch,
         );
-        if (entry) matchingTriples.push(entry.target_triple);
+        if (entry) {
+          matchingTriples.push(entry.target_triple);
+        }
       }
     }
     return matchingTriples.length > 0
@@ -277,7 +287,9 @@ export function buildSteps(ctx: StrategyContext): GitHubStep[] {
   // 2. Pre-build Hooks
   if (config.pre_build) {
     for (const s of config.pre_build) {
-      if (s.enabled === false || s.type === "builtin") continue;
+      if (s.enabled === false || s.type === "builtin") {
+        continue;
+      }
       steps.push(
         ...translateAbstractStep(
           ctx,
@@ -297,7 +309,9 @@ export function buildSteps(ctx: StrategyContext): GitHubStep[] {
   // 4. Post-build Hooks
   if (config.post_build) {
     for (const s of config.post_build) {
-      if (s.enabled === false || s.type === "builtin") continue;
+      if (s.enabled === false || s.type === "builtin") {
+        continue;
+      }
       steps.push(
         ...translateAbstractStep(
           ctx,

@@ -37,7 +37,9 @@ export interface MatrixEntry {
  * Runner versions are pinned in constants.ts for reproducibility.
  */
 function resolveGitHubRunner(os: string, arch: string): string {
-  if (os === "macos") return Runners.macos;
+  if (os === "macos") {
+    return Runners.macos;
+  }
   if (os === "windows") {
     return arch === "arm64" ? Runners.windowsArm : Runners.windows;
   }

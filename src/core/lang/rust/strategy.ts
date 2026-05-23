@@ -326,7 +326,7 @@ export const rustStrategy: LanguageStrategy = {
     }
 
     // 4. Platform-specific packagers
-    const hasPackage = (pkg: string): boolean => {
+    const hasPackage = (pkg: "bin" | "msi" | "deb" | "rpm" | "zip" | "tar.gz"): boolean => {
       if (isGha) {
         return ctx.config.targets?.some((t) => t.packages?.includes(pkg)) ?? false;
       }
@@ -334,17 +334,20 @@ export const rustStrategy: LanguageStrategy = {
     };
 
     if (hasPackage("deb")) {
-      steps.push({
+      const setupStep: AbstractStep = {
         type: "builtin",
         builtin: "install_tool",
         name: "Install cargo-deb",
         with: { tool: "cargo-deb" },
-        if: isGha ? "${{ matrix.has_deb }}" : undefined,
-      });
-      steps.push({
+      };
+      if (isGha) {
+        setupStep.if = "${{ matrix.has_deb }}";
+      }
+      steps.push(setupStep);
+
+      const buildStep: AbstractStep = {
         type: "shell",
         name: "Build .deb package",
-        if: isGha ? "${{ matrix.has_deb }}" : undefined,
         run: [
           "mkdir -p _packages",
           `cargo deb --target ${target.triple} --no-build -o _packages/`,
@@ -353,21 +356,28 @@ export const rustStrategy: LanguageStrategy = {
           "done",
         ].join("\n"),
         shell: "bash",
-      });
+      };
+      if (isGha) {
+        buildStep.if = "${{ matrix.has_deb }}";
+      }
+      steps.push(buildStep);
     }
 
     if (hasPackage("rpm")) {
-      steps.push({
+      const setupStep: AbstractStep = {
         type: "builtin",
         builtin: "install_tool",
         name: "Install cargo-generate-rpm",
         with: { tool: "cargo-generate-rpm" },
-        if: isGha ? "${{ matrix.has_rpm }}" : undefined,
-      });
-      steps.push({
+      };
+      if (isGha) {
+        setupStep.if = "${{ matrix.has_rpm }}";
+      }
+      steps.push(setupStep);
+
+      const buildStep: AbstractStep = {
         type: "shell",
         name: "Build .rpm package",
-        if: isGha ? "${{ matrix.has_rpm }}" : undefined,
         run: [
           "mkdir -p _packages",
           "cargo generate-rpm -o _packages/",
@@ -376,29 +386,40 @@ export const rustStrategy: LanguageStrategy = {
           "done",
         ].join("\n"),
         shell: "bash",
-      });
+      };
+      if (isGha) {
+        buildStep.if = "${{ matrix.has_rpm }}";
+      }
+      steps.push(buildStep);
     }
 
     if (hasPackage("msi")) {
-      steps.push({
+      const setupStep: AbstractStep = {
         type: "builtin",
         builtin: "install_tool",
         name: "Install cargo-wix",
         with: { tool: "cargo-wix" },
-        if: isGha ? "${{ matrix.has_msi }}" : undefined,
-      });
-      steps.push({
+      };
+      if (isGha) {
+        setupStep.if = "${{ matrix.has_msi }}";
+      }
+      steps.push(setupStep);
+
+      const buildStep: AbstractStep = {
         type: "shell",
         name: "Build .msi package",
-        if: isGha ? "${{ matrix.has_msi }}" : undefined,
         run: [
-          "mkdir -p _packages",
+          "if (!(Test-Path _packages)) { New-Item -ItemType Directory -Path _packages }",
           `cargo wix --target ${target.triple} -o _packages/`,
           `$msi = Get-ChildItem "_packages\\*.msi" | Select-Object -First 1`,
           `if ($msi) { Rename-Item -Path $msi.FullName -NewName "${target.outputName}.msi" }`,
         ].join("\n"),
         shell: "pwsh",
-      });
+      };
+      if (isGha) {
+        buildStep.if = "${{ matrix.has_msi }}";
+      }
+      steps.push(buildStep);
     }
 
     return steps;
