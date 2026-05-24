@@ -7,6 +7,11 @@ import { NameSchema } from "./primitives";
  * ##############
  */
 
+const FeatureFields = {
+  features: z.array(z.string()).optional(),
+  defaultFeatures: z.boolean().optional(),
+} as const;
+
 /**
  * --- BINARY ---
  */
@@ -15,6 +20,7 @@ export const CommonBinaryArtifact = z
     type: z.literal("bin"),
     name: NameSchema,
     outputName: z.string().min(1).optional(),
+    ...FeatureFields,
   })
   .strict();
 
@@ -27,6 +33,7 @@ export const CommonLibraryArtifact = z
     name: NameSchema,
     outputName: z.string().min(1).optional(),
     headers: z.boolean().optional().default(false),
+    ...FeatureFields,
   })
   .strict();
 

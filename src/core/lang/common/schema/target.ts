@@ -32,13 +32,15 @@ const BaseTargetSchema = z.object({
     })
     .optional(),
   includeInPackage: UniqueStringArraySchema("File to include in package must be unique").optional(),
+  features: z.array(z.string()).optional(),
+  defaultFeatures: z.boolean().optional(),
 });
 
 /**
  * --- BINARY ---
  */
 export const CommonBinaryTarget = BaseTargetSchema.extend({
-  type: z.literal("bin"),
+  type: z.literal("bin").optional(),
 })
   .strict()
   .superRefine(validateBinaryTarget);
@@ -47,7 +49,7 @@ export const CommonBinaryTarget = BaseTargetSchema.extend({
  * --- LIBRARY ---
  */
 export const CommonLibraryTarget = BaseTargetSchema.extend({
-  type: z.literal("lib"),
+  type: z.literal("lib").optional(),
   headers: z.boolean().optional().default(false),
 })
   .strict()

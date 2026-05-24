@@ -83,6 +83,67 @@ describe("validateConfigReferences", () => {
     );
   });
 
+  it("should reject bin package for library targets", () => {
+    const ctx = createMockCtx();
+    validateConfigReferences(
+      {
+        artifacts: [{ name: "foo", type: "lib" }],
+        targets: [{ id: "t1", for: "foo", packages: ["bin"] }],
+      },
+      ctx,
+    );
+    const issues = (ctx as unknown as { issues: z.ZodIssue[] }).issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.message).toContain("only valid for binary artifacts");
+    expect(issues[0]?.message).toContain("bin");
+  });
+
+  it("should reject deb/rpm/msi packages for library targets", () => {
+    const ctx = createMockCtx();
+    validateConfigReferences(
+      {
+        artifacts: [{ name: "foo", type: "lib" }],
+        targets: [{ id: "t1", for: "foo", packages: ["deb", "rpm", "msi"] }],
+      },
+      ctx,
+    );
+    const issues = (ctx as unknown as { issues: z.ZodIssue[] }).issues;
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.message).toContain("only valid for binary artifacts");
+  });
+
+  it("should allow tar.gz/zip packages for library targets", () => {
+    const ctx = createMockCtx();
+    validateConfigReferences(
+      {
+        artifacts: [{ name: "foo", type: "lib" }],
+        targets: [{ id: "t1", for: "foo", packages: ["tar.gz"] }],
+      },
+      ctx,
+    );
+    const issues = (ctx as unknown as { issues: z.ZodIssue[] }).issues;
+    const libPkgIssues = issues.filter((i) =>
+      i.message?.includes("only valid for binary artifacts"),
+    );
+    expect(libPkgIssues).toHaveLength(0);
+  });
+
+  it("should allow bin package for binary targets", () => {
+    const ctx = createMockCtx();
+    validateConfigReferences(
+      {
+        artifacts: [{ name: "foo", type: "bin" }],
+        targets: [{ id: "t1", for: "foo", packages: ["bin"] }],
+      },
+      ctx,
+    );
+    const issues = (ctx as unknown as { issues: z.ZodIssue[] }).issues;
+    const binPkgIssues = issues.filter((i) =>
+      i.message?.includes("only valid for binary artifacts"),
+    );
+    expect(binPkgIssues).toHaveLength(0);
+  });
+
   it("should allow duplicate artifact names of different types if target type matches", () => {
     const ctx = createMockCtx();
     validateConfigReferences(

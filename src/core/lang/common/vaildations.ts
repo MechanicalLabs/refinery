@@ -6,6 +6,10 @@ import { Package } from "../../types/packages";
 const DEFAULT_OUTPUT_PATTERN = "{name}-{os}-{arch}";
 const TRAILING_DASH_RE = /-$/u;
 
+const LIB_ONLY_PACKAGES = new Set(["bin"]);
+const LIB_SYSTEM_PACKAGES = new Set(["deb", "rpm", "msi"]);
+const FORBIDDEN_LIB_PACKAGES = new Set([...LIB_ONLY_PACKAGES, ...LIB_SYSTEM_PACKAGES]);
+
 function resolveOutputName(opts: {
   pattern: string;
   artifact: string;
@@ -122,16 +126,27 @@ export function validateBinaryTarget(
 }
 
 /**
- * Validates that all targets point to valid artifacts and types match.
+ * Validates that all targets point to valid artifacts and type matches.
  */
+// biome-ignore lint/complexity/noExcessiveNestedConditionals: exhaustive type checks
 export function validateConfigReferences(
   data: {
     artifacts: { name: string; type: string }[];
-    targets: { id: string; for: string; type: string }[];
+    targets: {
+      id: string;
+      for: string;
+      type?: string;
+      os?: string;
+      arch?: string[];
+      packages?: string[];
+      features?: string[];
+      defaultFeatures?: boolean;
+    }[];
   },
   ctx: z.RefinementCtx,
 ): void {
   const artifactNames = new Set(data.artifacts.map((a) => a.name));
+  let wasmCount = 0;
 
   for (const [index, target] of data.targets.entries()) {
     if (!artifactNames.has(target.for)) {
@@ -144,7 +159,7 @@ export function validateConfigReferences(
 
     const matchingArtifacts = data.artifacts.filter((a) => a.name === target.for);
     const [firstMatch] = matchingArtifacts;
-    if (firstMatch) {
+    if (firstMatch && target.type !== undefined) {
       const match = matchingArtifacts.find((a) => a.type === target.type);
       if (!match) {
         ctx.addIssue({
@@ -154,6 +169,36 @@ export function validateConfigReferences(
         });
       }
     }
+
+    if (target.arch?.includes("wasm32")) {
+      wasmCount++;
+      if (firstMatch && firstMatch.type !== "lib") {
+        ctx.addIssue({
+          code: "custom",
+          message: `Target '${target.id}' includes wasm32 architecture but artifact '${target.for}' is type '${firstMatch.type}'. wasm32 is only allowed for library artifacts.`,
+          path: ["targets", index, "arch"],
+        });
+      }
+    }
+
+    if (firstMatch?.type === "lib" && target.packages) {
+      const invalid = target.packages.filter((p) => FORBIDDEN_LIB_PACKAGES.has(p));
+      if (invalid.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Target '${target.id}' is for a library artifact but includes package(s): ${invalid.join(", ")}. These packages are only valid for binary artifacts.`,
+          path: ["targets", index, "packages"],
+        });
+      }
+    }
+  }
+
+  if (wasmCount > 1) {
+    ctx.addIssue({
+      code: "custom",
+      message: `wasm32 architecture is defined ${wasmCount} times across targets. wasm32 can only be exported once.`,
+      path: ["targets"],
+    });
   }
 }
 
