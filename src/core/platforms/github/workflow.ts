@@ -156,6 +156,9 @@ function buildJobs(ctx: StrategyContext, matrix: MatrixEntry[]): Record<string, 
     build: {
       name: "${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.abi || 'default' }})",
       "runs-on": "${{ matrix.runs_on }}",
+      permissions: {
+        contents: "read",
+      },
       env: {
         ...buildEnv,
       },
