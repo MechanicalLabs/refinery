@@ -82,7 +82,9 @@ export function getAvailableArchs(
   const wasmTaken = isWasmAlreadyCovered(artifactName, os, coverage);
 
   return osEntry.archs.filter((arch) => {
-    if (arch === "wasm32" && wasmTaken) return false;
+    if (arch === "wasm32" && wasmTaken) {
+      return false;
+    }
     return !covered.has(arch);
   });
 }

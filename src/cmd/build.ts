@@ -116,7 +116,9 @@ async function runPhaseSteps(
 
 function getBuildEntries(config: RefineryConfig, targetId?: string): MatrixEntry[] {
   const matrixResult = buildMatrix(config);
-  if (!matrixResult.ok) return [];
+  if (!matrixResult.ok) {
+    return [];
+  }
   if (!targetId) {
     return matrixResult.value;
   }

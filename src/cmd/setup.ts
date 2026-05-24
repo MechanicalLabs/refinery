@@ -28,7 +28,9 @@ async function runSetup(dryRun = false): AsyncResult<void, Error> {
   const lang = langResult.value;
 
   const matrixResult = buildMatrix(config);
-  if (!matrixResult.ok) return matrixResult;
+  if (!matrixResult.ok) {
+    return matrixResult;
+  }
   const entries = matrixResult.value;
   if (entries.length === 0) {
     logger.warn("No targets defined in refinery.toml. Nothing to set up.");

@@ -20,15 +20,25 @@ function validateWithLang(data: Record<string, unknown>, config: RefineryConfig)
 }
 
 function deepKindOf(err: unknown): string | undefined {
-  if (!err || typeof err !== "object") return undefined;
-  if ("kind" in err) return (err as { kind: string }).kind;
-  if (err instanceof Error && err.cause) return deepKindOf(err.cause);
+  if (!err || typeof err !== "object") {
+    return undefined;
+  }
+  if ("kind" in err) {
+    return (err as { kind: string }).kind;
+  }
+  if (err instanceof Error && err.cause) {
+    return deepKindOf(err.cause);
+  }
   return undefined;
 }
 
 function findZodError(err: unknown): ZodError | undefined {
-  if (err instanceof ZodError) return err;
-  if (err instanceof Error && err.cause) return findZodError(err.cause);
+  if (err instanceof ZodError) {
+    return err;
+  }
+  if (err instanceof Error && err.cause) {
+    return findZodError(err.cause);
+  }
   return undefined;
 }
 
@@ -38,7 +48,7 @@ function flattenZodIssues(issues: z.ZodIssue[]): string[] {
     if ("errors" in issue && Array.isArray(issue.errors)) {
       lines.push(...flattenZodIssues(issue.errors.flat() as z.ZodIssue[]));
     } else {
-      lines.push(`${issue.path.length > 0 ? issue.path.join(".") + ": " : ""}${issue.message}`);
+      lines.push(`${issue.path.length > 0 ? `${issue.path.join(".")}: ` : ""}${issue.message}`);
     }
   }
   return [...new Set(lines)];

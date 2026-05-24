@@ -277,7 +277,9 @@ function getStepIfCondition(
   }
 
   const matrixResult = buildMatrix(config);
-  if (!matrixResult.ok) return undefined;
+  if (!matrixResult.ok) {
+    return undefined;
+  }
   const entries = matrixResult.value;
   if (entries.length === 0) {
     return undefined;

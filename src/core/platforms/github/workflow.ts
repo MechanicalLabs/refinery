@@ -1,9 +1,9 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
 import { dump } from "js-yaml";
 import { Ok, type Result } from "ripthrow";
-import type { RefineryConfig, RefineryConfigTarget } from "../../../core/schema";
+import type { PublishStep, RefineryConfig } from "../../../core/schema";
 import type { StrategyContext } from "../../../core/strategy/types";
-import { type AppError, Errors } from "../../../errors";
+import type { AppError } from "../../../errors";
 import { Actions } from "./constants";
 import { buildMatrix, type MatrixEntry } from "./matrix";
 import { buildSteps } from "./steps";
@@ -171,7 +171,9 @@ function buildJobs(ctx: StrategyContext, matrix: MatrixEntry[]): Record<string, 
 
 export function buildWorkflowYaml(ctx: StrategyContext): Result<string, AppError> {
   const matrixResult = buildMatrix(ctx.config);
-  if (!matrixResult.ok) return matrixResult;
+  if (!matrixResult.ok) {
+    return matrixResult;
+  }
 
   const workflow = {
     name: "Refinery Build",

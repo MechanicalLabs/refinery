@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
 import path from "node:path";
 import pc from "picocolors";
 import { type AsyncResult, buildAsync, ResultBuilder } from "ripthrow";

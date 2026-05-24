@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential toolchain checks are intentional
 import path from "node:path";
 import { type AsyncResult, Err, Ok } from "ripthrow";
