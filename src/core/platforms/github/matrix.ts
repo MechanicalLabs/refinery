@@ -2,9 +2,11 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
 // biome-ignore-all lint/complexity/useLiteralKeys: GHA env var names need bracket notation
 
-import type { Arch } from "../../../core/types/arch";
+import type { Result } from "ripthrow";
+import { Err, Ok } from "ripthrow";
+import { type AppError, Errors } from "../../../errors";
 import type { RefineryConfig } from "../../schema";
-import { TargetRegistry } from "../../strategy/target-registry";
+import { LanguageRegistry } from "../../strategy/registry";
 import { Runners } from "./constants";
 
 export interface MatrixEntry {
@@ -30,6 +32,9 @@ export interface MatrixEntry {
   abi?: string | undefined;
   linker?: string | undefined;
   linker_env: string[];
+  features: string[];
+  features_str: string;
+  default_features: boolean;
 }
 
 /**
@@ -87,16 +92,30 @@ function resolveOutputName(
 function buildBaseEntry(
   artifact: RefineryConfig["artifacts"][0],
   target: RefineryConfig["targets"][0],
-  arch: (typeof Arch)[keyof typeof Arch],
-): MatrixEntry {
-  const targetInfo = TargetRegistry.find({
-    os: target.os,
-    arch,
-    abi: target.abi,
-  });
+  arch: string,
+  langStrategy: {
+    getTargetInfo: (
+      os: string,
+      arch: string,
+      abi?: string,
+    ) =>
+      | {
+          triple: string;
+          linker?: string;
+          aptPackages: string[];
+          linkerEnv?: Record<string, string>;
+        }
+      | undefined;
+  },
+): Result<MatrixEntry, AppError> {
+  const targetInfo = langStrategy.getTargetInfo(target.os, arch, target.abi);
 
   if (!targetInfo) {
-    throw new Error(`Target info not found for ${target.os} ${arch}`);
+    return Err(
+      Errors.unsupportedTarget({
+        triple: `${arch}-${target.os}${target.abi ? `-${target.abi}` : ""}`,
+      }),
+    );
   }
 
   const pkgFlags = getPackageFlags(target.packages || []);
@@ -109,7 +128,20 @@ function buildBaseEntry(
     abi: target.abi,
   });
 
-  const headersEnabled = artifact.type === "lib" && (artifact.headers ?? false);
+  const targetHeaders = (target as Record<string, unknown>)["headers"] as boolean | undefined;
+  const headersEnabled = artifact.type === "lib" && (targetHeaders ?? artifact.headers ?? false);
+
+  const artFeatures = (artifact as Record<string, unknown>)["features"] as string[] | undefined;
+  const tgtFeatures = (target as Record<string, unknown>)["features"] as string[] | undefined;
+  const features = tgtFeatures ?? artFeatures ?? [];
+
+  const artDefaultFeatures = (artifact as Record<string, unknown>)["defaultFeatures"] as
+    | boolean
+    | undefined;
+  const tgtDefaultFeatures = (target as Record<string, unknown>)["defaultFeatures"] as
+    | boolean
+    | undefined;
+  const defaultFeatures = tgtDefaultFeatures ?? artDefaultFeatures ?? true;
 
   const aptPackages = [...targetInfo.aptPackages];
   if (pkgFlags.has_rpm && !aptPackages.includes("rpm")) {
@@ -141,16 +173,25 @@ function buildBaseEntry(
     headers: headersEnabled,
     linker: targetInfo.linker,
     linker_env: linkerEnv,
+    features,
+    features_str: features.join(","),
+    default_features: defaultFeatures,
   };
 
   if (target.abi) {
     entry.abi = target.abi;
   }
 
-  return entry;
+  return Ok(entry);
 }
 
-export function buildMatrix(config: RefineryConfig): MatrixEntry[] {
+export function buildMatrix(config: RefineryConfig): Result<MatrixEntry[], AppError> {
+  const langResult = LanguageRegistry.get(config.lang);
+  if (!langResult.ok) {
+    return Ok([]);
+  }
+  const langStrategy = langResult.value;
+
   const entries: MatrixEntry[] = [];
 
   for (const artifact of config.artifacts) {
@@ -158,34 +199,14 @@ export function buildMatrix(config: RefineryConfig): MatrixEntry[] {
 
     for (const target of targets) {
       for (const arch of target.arch) {
-        entries.push(buildBaseEntry(artifact, target, arch));
+        const result = buildBaseEntry(artifact, target, arch, langStrategy);
+        if (!result.ok) {
+          return result;
+        }
+        entries.push(result.value);
       }
     }
   }
 
-  return entries;
-}
-
-export function buildReleaseEnv(config: RefineryConfig): Record<string, string> {
-  const env: Record<string, string> = {};
-  const r = config.release;
-
-  if (!r) {
-    return env;
-  }
-
-  if (r.strip) {
-    env["CARGO_PROFILE_RELEASE_STRIP"] = "symbols";
-  }
-  if (r.lto) {
-    env["CARGO_PROFILE_RELEASE_LTO"] = "true";
-  }
-  if (r.codegenUnits && r.codegenUnits > 0) {
-    env["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] = String(r.codegenUnits);
-  }
-  if (r.panic === "abort") {
-    env["CARGO_PROFILE_RELEASE_PANIC"] = "abort";
-  }
-
-  return env;
+  return Ok(entries);
 }

@@ -5,17 +5,16 @@ import pc from "picocolors";
 import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
 import { loadManifest } from "../core/io/manifest";
+import { resolveComposite } from "../core/platforms/github/composite";
 import type { MatrixEntry } from "../core/platforms/github/matrix";
 import { buildMatrix } from "../core/platforms/github/matrix";
 import type { PostBuildStep, PreBuildStep, PublishStep, RefineryConfig } from "../core/schema";
 import { LocalEnv } from "../core/strategy/local-env";
 import { LanguageRegistry } from "../core/strategy/registry";
-import { TargetRegistry } from "../core/strategy/target-registry";
 import type { AbstractStep, StrategyContext, TargetMetadata } from "../core/strategy/types";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
-import { resolveComposite } from "../utils/composite";
 import { sh, shWithEnv } from "../utils/shell";
 import type { Cmd } from "./types";
 
@@ -35,30 +34,20 @@ function entryToMetadata(entry: MatrixEntry): TargetMetadata {
     linker: entry.linker ?? undefined,
     artifactBin: entry.artifact_bin,
     aptPackages: entry.apt_packages,
+    features: entry.features_str,
+    defaultFeatures: entry.default_features,
   };
 }
 
-function buildEnvForEntry(target: TargetMetadata, config: RefineryConfig): Record<string, string> {
-  const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
-  const env: Record<string, string> = { ...(targetInfo?.linkerEnv ?? {}) };
-
-  if (config.lang === "rust" && config.release) {
-    const r = config.release;
-    if (r.strip) {
-      env["CARGO_PROFILE_RELEASE_STRIP"] = "symbols";
-    }
-    if (r.lto) {
-      env["CARGO_PROFILE_RELEASE_LTO"] = "true";
-    }
-    if (r.codegenUnits && r.codegenUnits > 0) {
-      env["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] = String(r.codegenUnits);
-    }
-    if (r.panic === "abort") {
-      env["CARGO_PROFILE_RELEASE_PANIC"] = "abort";
-    }
-  }
-
-  return env;
+function buildEnvForEntry(
+  lang: import("../core/strategy/types").LanguageStrategy,
+  target: TargetMetadata,
+  config: RefineryConfig,
+): Record<string, string> {
+  const targetInfo = lang.getTargetInfo(target.os, target.arch, target.abi);
+  const targetEnv = targetInfo?.linkerEnv ?? {};
+  const buildEnv = lang.getBuildEnv(config);
+  return { ...targetEnv, ...buildEnv };
 }
 
 function shouldExecuteStep(
@@ -126,15 +115,16 @@ async function runPhaseSteps(
 }
 
 function getBuildEntries(config: RefineryConfig, targetId?: string): MatrixEntry[] {
-  const allEntries = buildMatrix(config);
+  const matrixResult = buildMatrix(config);
+  if (!matrixResult.ok) return [];
   if (!targetId) {
-    return allEntries;
+    return matrixResult.value;
   }
   const target = config.targets?.find((t) => t.id === targetId);
   if (!target) {
     return [];
   }
-  return allEntries.filter(
+  return matrixResult.value.filter(
     (e) =>
       target.for === e.artifact &&
       e.os === target.os &&
@@ -170,7 +160,7 @@ async function executeAbstractStep(
       return Ok();
     }
 
-    const env = buildEnvForEntry(target, ctx.config);
+    const env = buildEnvForEntry(ctx.lang, target, ctx.config);
     if (step.env) {
       Object.assign(env, step.env);
     }
@@ -194,10 +184,10 @@ async function executeAbstractStep(
       case "setup_linker":
         if (target.os === "linux") {
           if (setup) {
-            return LocalEnv.installSystemDeps(target, dryRun);
+            return LocalEnv.installSystemDeps(target, ctx.lang, dryRun);
           }
 
-          const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
+          const targetInfo = ctx.lang.getTargetInfo(target.os, target.arch, target.abi);
           const apt = targetInfo?.aptPackages ?? [];
           if (target.packages.includes("rpm") && !apt.includes("rpm")) {
             apt.push("rpm");
@@ -294,26 +284,11 @@ async function buildSingleEntry(
 }
 
 async function validateToolchain(config: RefineryConfig): AsyncResult<void, Error> {
-  if (config.lang === "rust") {
-    const rustcRes = await LocalEnv.checkTool("rustc", "rustc", true);
-    if (!rustcRes.ok) {
-      return rustcRes;
-    }
-
-    const cargoRes = await LocalEnv.checkTool("cargo", "cargo", true);
-    if (!cargoRes.ok) {
-      return cargoRes;
-    }
-
-    const hasHeaders = config.targets.some((t) => t.type === "lib" && t.headers);
-    if (hasHeaders) {
-      const cbindgenRes = await LocalEnv.checkTool("cbindgen", "cbindgen", true);
-      if (!cbindgenRes.ok) {
-        return cbindgenRes;
-      }
-    }
+  const langResult = LanguageRegistry.get(config.lang);
+  if (!langResult.ok) {
+    return Ok();
   }
-  return Ok();
+  return langResult.value.validateToolchain(config);
 }
 
 async function runBuild(

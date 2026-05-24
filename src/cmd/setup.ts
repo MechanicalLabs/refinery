@@ -4,6 +4,7 @@ import { type AsyncResult, buildAsync, Ok } from "ripthrow";
 import { loadManifest } from "../core/io/manifest";
 import { buildMatrix } from "../core/platforms/github/matrix";
 import { LocalEnv } from "../core/strategy/local-env";
+import { LanguageRegistry } from "../core/strategy/registry";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
 import type { Cmd } from "./types";
@@ -19,7 +20,16 @@ async function runSetup(dryRun = false): AsyncResult<void, Error> {
   }
   const config = manifestRes.value;
 
-  const entries = buildMatrix(config);
+  const langResult = LanguageRegistry.get(config.lang);
+  if (!langResult.ok) {
+    logger.warn(`Language '${config.lang}' not supported. Nothing to set up.`);
+    return Ok();
+  }
+  const lang = langResult.value;
+
+  const matrixResult = buildMatrix(config);
+  if (!matrixResult.ok) return matrixResult;
+  const entries = matrixResult.value;
   if (entries.length === 0) {
     logger.warn("No targets defined in refinery.toml. Nothing to set up.");
     return Ok();
@@ -45,12 +55,14 @@ async function runSetup(dryRun = false): AsyncResult<void, Error> {
       linker: entry.linker ?? undefined,
       artifactBin: entry.artifact_bin,
       aptPackages: entry.apt_packages,
+      features: entry.features_str,
+      defaultFeatures: entry.default_features,
     };
 
     logger.info(`Setting up environment for ${pc.green(entry.target_triple)}...`);
 
     // Setup toolchain
-    const toolchain = config.lang === "rust" ? (config.toolchain as string) || "stable" : "stable";
+    const toolchain = lang.getToolchainVersion(config);
     const toolchainRes = await LocalEnv.setupToolchain(entry.target_triple, toolchain, dryRun);
     if (!toolchainRes.ok) {
       return toolchainRes;
@@ -58,7 +70,7 @@ async function runSetup(dryRun = false): AsyncResult<void, Error> {
 
     // Setup system deps (Linux only)
     if (entry.os === "linux") {
-      const depsRes = await LocalEnv.installSystemDeps(target, dryRun);
+      const depsRes = await LocalEnv.installSystemDeps(target, lang, dryRun);
       if (!depsRes.ok) {
         return depsRes;
       }

@@ -29,6 +29,8 @@ const GHA_TARGET: TargetMetadata = {
   packages: [],
   includeFiles: ["${{ join(matrix.include_files, ' ') }}"],
   aptPackages: [],
+  features: "${{ matrix.features_str }}",
+  defaultFeatures: "${{ matrix.default_features }}" as unknown as boolean,
 };
 
 /**
@@ -39,8 +41,8 @@ function translateSetupLinker(baseIf?: string): GitHubStep[] {
     {
       name: "Configure Linker and System Dependencies",
       if: baseIf
-        ? `(matrix.apt_packages[0] != null || matrix.linker_env[0] != null) && (${baseIf})`
-        : "matrix.apt_packages[0] != null || matrix.linker_env[0] != null",
+        ? `(join(matrix.apt_packages, '') != '' || join(matrix.linker_env, '') != '') && (${baseIf})`
+        : "join(matrix.apt_packages, '') != '' || join(matrix.linker_env, '') != ''",
       run: [
         "PKGS=\"${{ join(matrix.apt_packages, ' ') }}\"",
         'if [ -n "$PKGS" ] && [ "${{ runner.os }}" = "Linux" ]; then',
@@ -96,6 +98,20 @@ if ($wixDir -and (Test-Path "$($wixDir.FullName)\\bin\\candle.exe")) {
 }
 
 /**
+ * Maps packaging step names to their corresponding matrix condition flags.
+ */
+const PACKAGE_CONDITIONS: Record<string, string> = {
+  ".deb": "${{ matrix.has_deb }}",
+  ".rpm": "${{ matrix.has_rpm }}",
+  ".msi": "${{ matrix.has_msi }}",
+  "cargo-wix": "${{ matrix.has_msi }}",
+  deb: "${{ matrix.has_deb }}",
+  rpm: "${{ matrix.has_rpm }}",
+  msi: "${{ matrix.has_msi }}",
+  wix: "${{ matrix.has_msi }}",
+};
+
+/**
  * Translates the package builtin by delegating entirely to the Language Strategy.
  */
 function translatePackage(
@@ -110,7 +126,21 @@ function translatePackage(
     if (s.type === "builtin" && (s.builtin === "package" || s.builtin === "upload_artifact")) {
       continue;
     }
-    steps.push(...translateAbstractStep(ctx, s, config, baseIf));
+
+    // In GHA, package-specific steps are conditioned on matrix flags (has_deb, has_rpm, has_msi).
+    // Derive condition from step name: if the name contains "deb"/"rpm"/"msi", gate on the flag.
+    let stepIf = s.if;
+    if (!stepIf && s.name) {
+      for (const [key, flag] of Object.entries(PACKAGE_CONDITIONS)) {
+        if (s.name.toLowerCase().includes(key)) {
+          stepIf = flag;
+          break;
+        }
+      }
+    }
+
+    const conditioned: AbstractStep = stepIf ? { ...s, if: stepIf } : s;
+    steps.push(...translateAbstractStep(ctx, conditioned, config, baseIf));
   }
 
   return steps;
@@ -143,13 +173,24 @@ function translateAbstractStep(
     return [s];
   }
 
-  if (step.type === "action" || (step as any).type === "composite") {
+  if (step.type === "action") {
     const s: GitHubStep = {
-      name: (step as any).name ?? "Execute Action",
-      uses: step.type === "action" ? step.uses : `./.github/actions/${(step as any).action}`,
+      name: step.name ?? "Execute Action",
+      uses: step.uses,
       with: step.with as Record<string, string | boolean | number>,
-      env: (step as any).env,
-      if: mergeIf((step as any).if, baseIf),
+      env: step.env,
+      if: mergeIf(step.if, baseIf),
+    };
+    return [s];
+  }
+
+  if (step.type === "composite") {
+    const s: GitHubStep = {
+      name: step.name ?? "Execute Action",
+      uses: `./.github/actions/${step.action}`,
+      with: step.with as Record<string, string | boolean | number>,
+      env: step.env,
+      if: mergeIf(step.if, baseIf),
     };
     return [s];
   }
@@ -169,7 +210,7 @@ function translateAbstractStep(
           with: {
             target: "${{ matrix.target_triple }}",
             cache: true,
-            toolchain: (config as any).toolchain || "stable",
+            toolchain: ctx.lang.getToolchainVersion(config),
             ...(step.with ?? {}),
           },
         });
@@ -235,7 +276,9 @@ function getStepIfCondition(
     return undefined;
   }
 
-  const entries = buildMatrix(config);
+  const matrixResult = buildMatrix(config);
+  if (!matrixResult.ok) return undefined;
+  const entries = matrixResult.value;
   if (entries.length === 0) {
     return undefined;
   }
