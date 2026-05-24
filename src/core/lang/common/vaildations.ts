@@ -128,7 +128,6 @@ export function validateBinaryTarget(
 /**
  * Validates that all targets point to valid artifacts and type matches.
  */
-// biome-ignore lint/complexity/noExcessiveNestedConditionals: exhaustive type checks
 export function validateConfigReferences(
   data: {
     artifacts: { name: string; type: string }[];

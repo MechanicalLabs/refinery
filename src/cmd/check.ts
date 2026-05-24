@@ -1,7 +1,6 @@
 import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { loadManifest } from "../core/io/manifest";
-import { LocalEnv } from "../core/strategy/local-env";
-import { TargetRegistry } from "../core/strategy/target-registry";
+import { LanguageRegistry } from "../core/strategy/registry";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
@@ -25,30 +24,19 @@ async function runCheck(options: { manifestOnly?: boolean } = {}): AsyncResult<v
       }
 
       logger.info("\nChecking toolchain:");
-      if (config.lang === "rust") {
-        const rustcRes = await LocalEnv.checkTool("rustc", "rustc");
-        if (!rustcRes.ok) {
-          return rustcRes;
-        }
-
-        const cargoRes = await LocalEnv.checkTool("cargo", "cargo");
-        if (!cargoRes.ok) {
-          return cargoRes;
-        }
-
-        const hasHeaders = config.targets.some((t) => t.type === "lib" && t.headers);
-        if (hasHeaders) {
-          const cbindgenRes = await LocalEnv.checkTool("cbindgen", "cbindgen");
-          if (!cbindgenRes.ok) {
-            return cbindgenRes;
-          }
+      const langResult = LanguageRegistry.get(config.lang);
+      if (langResult.ok) {
+        const toolchainRes = await langResult.value.validateToolchain(config);
+        if (!toolchainRes.ok) {
+          return toolchainRes;
         }
       }
 
       logger.info("\nChecking targets:");
+      const langStrategy = langResult.ok ? langResult.value : null;
       for (const target of config.targets) {
         for (const arch of target.arch) {
-          const info = TargetRegistry.find({ os: target.os, arch, abi: target.abi });
+          const info = langStrategy?.getTargetInfo(target.os, arch, target.abi);
           if (info) {
             logger.done(`  ✓ Target supported: ${info.triple}`);
           } else {

@@ -106,9 +106,10 @@ export const step = {
         clack.multiselect({
           message,
           options: options.map((opt) => ({
-            ...opt,
-            hint: opt.hint ?? undefined,
-          })) as any,
+            value: opt.value,
+            label: opt.label,
+            ...(opt.hint ? { hint: opt.hint } : {}),
+          })) as Parameters<typeof select>[0]["options"],
           required,
         }),
       ) as Promise<StepResult<T[]>>,

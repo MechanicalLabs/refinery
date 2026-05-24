@@ -5,8 +5,8 @@ import type {
   CommonLibraryArtifact,
 } from "../../core/lang/common/schema/artifact";
 import type { CommonBinaryTarget, CommonLibraryTarget } from "../../core/lang/common/schema/target";
-import { isAbiRequired } from "../../core/types/compatibility";
-import { Package } from "../../core/types/packages";
+import { LanguageRegistry } from "../../core/strategy/registry";
+import type { LanguageCapabilities } from "../../core/types/capabilities";
 import { logger } from "../../ui/log";
 import { step } from "../../ui/prompt";
 import { type CoverageMap, getAvailableOsOptions, updateCoverage } from "./coverage";
@@ -22,10 +22,27 @@ import {
 type Artifact = CommonBinaryArtifact | CommonLibraryArtifact;
 type Target = CommonBinaryTarget | CommonLibraryTarget;
 
+async function loadCaps(language: string): Promise<LanguageCapabilities | undefined> {
+  const langResult = LanguageRegistry.get(language);
+  if (!langResult.ok) {
+    return undefined;
+  }
+  return langResult.value.capabilities;
+}
+
 /**
  * Interactive wizard to define build targets for the project's artifacts.
  */
-async function promptTargets(artifacts: Artifact[]): Promise<Target[] | undefined> {
+async function promptTargets(
+  artifacts: Artifact[],
+  language: string,
+): Promise<Target[] | undefined> {
+  const caps = await loadCaps(language);
+  if (!caps) {
+    logger.error(`Language '${language}' is not supported.`);
+    return;
+  }
+
   const targets: Target[] = [];
   const usedIds = new Set<string>();
   const coverage: CoverageMap = new Map();
@@ -34,7 +51,9 @@ async function promptTargets(artifacts: Artifact[]): Promise<Target[] | undefine
     return targets;
   }
 
-  const availableArtifacts = artifacts.filter((a) => getAvailableOsOptions(a, coverage).length > 0);
+  const availableArtifacts = artifacts.filter(
+    (a) => getAvailableOsOptions(a, coverage, caps).length > 0,
+  );
   if (availableArtifacts.length === 0) {
     return targets;
   }
@@ -49,13 +68,13 @@ async function promptTargets(artifacts: Artifact[]): Promise<Target[] | undefine
 
   let addAnother = true;
   while (addAnother) {
-    const remaining = artifacts.filter((a) => getAvailableOsOptions(a, coverage).length > 0);
+    const remaining = artifacts.filter((a) => getAvailableOsOptions(a, coverage, caps).length > 0);
     if (remaining.length === 0) {
       break;
     }
 
     // biome-ignore lint/performance/noAwaitInLoops: interactive terminal flows require sequential await
-    const target = await promptSingleTarget(remaining, usedIds, coverage);
+    const target = await promptSingleTarget(remaining, usedIds, coverage, caps);
     if (isCancel(target)) {
       return;
     }
@@ -63,7 +82,9 @@ async function promptTargets(artifacts: Artifact[]): Promise<Target[] | undefine
       targets.push(target);
     }
 
-    const stillAvailable = artifacts.filter((a) => getAvailableOsOptions(a, coverage).length > 0);
+    const stillAvailable = artifacts.filter(
+      (a) => getAvailableOsOptions(a, coverage, caps).length > 0,
+    );
     if (stillAvailable.length === 0) {
       break;
     }
@@ -85,13 +106,14 @@ async function promptSingleTarget(
   artifacts: Artifact[],
   usedIds: Set<string>,
   coverage: CoverageMap,
+  caps: LanguageCapabilities,
 ): Promise<Target | undefined | symbol> {
   const artifact = await selectArtifact(artifacts);
   if (isCancel(artifact) || !artifact) {
     return artifact;
   }
 
-  const osOptions = getAvailableOsOptions(artifact, coverage);
+  const osOptions = getAvailableOsOptions(artifact, coverage, caps);
   if (osOptions.length === 0) {
     logger.warn(`All possible targets for artifact "${artifact.name}" are already covered.`);
     return;
@@ -102,16 +124,12 @@ async function promptSingleTarget(
     return base;
   }
 
-  const abi = await promptAbi(artifact.name, base.os, coverage);
+  const abi = await promptAbi(artifact.name, base.os, coverage, caps);
   if (isCancel(abi)) {
     return abi;
   }
-  if (isAbiRequired(base.os) && !abi) {
-    logger.warn(`No ABIs available for ${base.os}. Skipping target.`);
-    return;
-  }
 
-  const archs = await promptArchitectures(artifact.name, base.os, abi as string, coverage);
+  const archs = await promptArchitectures(artifact.name, base.os, abi as string, coverage, caps);
   if (isCancel(archs)) {
     return archs;
   }
@@ -119,12 +137,12 @@ async function promptSingleTarget(
     return;
   }
 
-  const pkgs = await promptPackages(base.os);
+  const pkgs = await promptPackages(base.os, caps);
   if (isCancel(pkgs)) {
     return pkgs;
   }
 
-  const hasArchive = pkgs.includes(Package.tar_gz) || pkgs.includes(Package.zip);
+  const hasArchive = pkgs.includes("tar.gz") || pkgs.includes("zip");
   let includeFiles: string[] = [];
   if (hasArchive) {
     includeFiles = await promptIncludeFiles();

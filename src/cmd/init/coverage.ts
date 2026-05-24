@@ -1,42 +1,89 @@
+// biome-ignore-all lint/style/useExportsLast: exported types and functions are used throughout
 import type {
   CommonBinaryArtifact,
   CommonLibraryArtifact,
 } from "../../core/lang/common/schema/artifact";
-import type { Arch } from "../../core/types/arch";
-import { getCompatibleAbis, isAbiRequired } from "../../core/types/compatibility";
-import { Os } from "../../core/types/os";
+import type { LanguageCapabilities } from "../../core/types/capabilities";
 
-export const TOTAL_ARCHS = 5;
 export type CoverageMap = Map<string, Set<string>>;
 
 /**
- * Returns OS options that still have uncovered targets (ABIs/Archs)
- * for a specific artifact.
+ * Returns OS options that still have at least one architecture available
+ * for a specific artifact and language capabilities.
  */
 export function getAvailableOsOptions(
   artifact: CommonBinaryArtifact | CommonLibraryArtifact,
   coverage: CoverageMap,
+  caps: LanguageCapabilities,
 ): { value: string; label: string }[] {
-  const osOptions = [
-    { value: Os.linux, label: "Linux" },
-    { value: Os.macos, label: "macOS" },
-    { value: Os.windows, label: "Windows" },
-  ];
+  const osOptions = caps.oses.map((os) => ({
+    value: os,
+    label: os.charAt(0).toUpperCase() + os.slice(1),
+  }));
 
   return osOptions.filter((osOpt) => {
-    if (!isAbiRequired(osOpt.value)) {
-      const key = `${artifact.name}:${osOpt.value}:none`;
-      const coveredArchs = coverage.get(key) ?? new Set();
-      return coveredArchs.size < TOTAL_ARCHS;
+    const osEntry = caps.archs.find((a) => a.os === osOpt.value);
+    if (!osEntry) {
+      return false;
     }
 
-    const abis = getCompatibleAbis(osOpt.value);
-
+    const abis = osEntry.abis && osEntry.abis.length > 0 ? osEntry.abis : [undefined];
     return abis.some((a) => {
-      const key = `${artifact.name}:${osOpt.value}:${a}`;
-      const coveredArchs = coverage.get(key) ?? new Set();
-      return coveredArchs.size < TOTAL_ARCHS;
+      const available = getAvailableArchs(artifact.name, osOpt.value, a, coverage, caps);
+      return available.length > 0;
     });
+  });
+}
+
+/**
+ * Gets available ABIs for a given artifact, OS, and language capabilities.
+ */
+export function getAvailableAbis(
+  artifactName: string,
+  os: string,
+  coverage: CoverageMap,
+  caps: LanguageCapabilities,
+): string[] {
+  const osEntry = caps.archs.find((a) => a.os === os);
+  if (!osEntry?.abis) {
+    return [];
+  }
+
+  return osEntry.abis.filter((abi) => {
+    const available = getAvailableArchs(artifactName, os, abi, coverage, caps);
+    return available.length > 0;
+  });
+}
+
+/**
+ * Gets available architectures for a given artifact, OS, ABI, and language capabilities.
+ */
+function isWasmAlreadyCovered(artifactName: string, os: string, coverage: CoverageMap): boolean {
+  return Array.from(coverage.entries()).some(
+    ([k, v]) => k.startsWith(`${artifactName}:${os}:`) && v.has("wasm32"),
+  );
+}
+
+export function getAvailableArchs(
+  artifactName: string,
+  os: string,
+  abi: string | undefined,
+  coverage: CoverageMap,
+  caps: LanguageCapabilities,
+): string[] {
+  const osEntry = caps.archs.find((a) => a.os === os);
+  if (!osEntry) {
+    return [];
+  }
+
+  const abiKey = abi ?? "none";
+  const key = `${artifactName}:${os}:${abiKey}`;
+  const covered = coverage.get(key) ?? new Set();
+  const wasmTaken = isWasmAlreadyCovered(artifactName, os, coverage);
+
+  return osEntry.archs.filter((arch) => {
+    if (arch === "wasm32" && wasmTaken) return false;
+    return !covered.has(arch);
   });
 }
 
@@ -47,14 +94,11 @@ export function updateCoverage(params: {
   artifactName: string;
   os: string;
   abi: string | undefined;
-  archs: (keyof typeof Arch)[];
+  archs: string[];
   coverage: CoverageMap;
 }): void {
   const { artifactName, os, abi, archs, coverage } = params;
-  let abiKey = "none";
-  if (abi) {
-    abiKey = abi;
-  }
+  const abiKey = abi ?? "none";
   const key = `${artifactName}:${os}:${abiKey}`;
 
   if (!coverage.has(key)) {
@@ -64,5 +108,13 @@ export function updateCoverage(params: {
   const archSet = coverage.get(key) as Set<string>;
   for (const a of archs) {
     archSet.add(a);
+  }
+
+  if (archs.includes("wasm32")) {
+    for (const [k, v] of coverage.entries()) {
+      if (k.startsWith(`${artifactName}:${os}:`) && k !== key) {
+        v.add("wasm32");
+      }
+    }
   }
 }

@@ -8,15 +8,11 @@ import type {
   CommonLibraryArtifact,
 } from "../../core/lang/common/schema/artifact";
 import type { CommonBinaryTarget, CommonLibraryTarget } from "../../core/lang/common/schema/target";
-import { Abi } from "../../core/types/abi";
-import { Arch } from "../../core/types/arch";
-import { getCompatibleAbis } from "../../core/types/compatibility";
-import type { Os } from "../../core/types/os";
-import { Package } from "../../core/types/packages";
+import type { LanguageCapabilities } from "../../core/types/capabilities";
 import { logger } from "../../ui/log";
 import { step, toUiValidator } from "../../ui/prompt";
 import { validateName } from "../../utils/naming";
-import { type CoverageMap, TOTAL_ARCHS } from "./coverage";
+import { type CoverageMap, getAvailableAbis, getAvailableArchs } from "./coverage";
 
 type Artifact = CommonBinaryArtifact | CommonLibraryArtifact;
 type Target = CommonBinaryTarget | CommonLibraryTarget;
@@ -24,9 +20,9 @@ type Target = CommonBinaryTarget | CommonLibraryTarget;
 interface CreateTargetOptions {
   baseInfo: { id: string; for: string; os: string };
   artifact: Artifact;
-  archs: (keyof typeof Arch)[];
+  archs: string[];
   abi: string | undefined;
-  packages?: (typeof Package)[keyof typeof Package][];
+  packages?: string[];
   includeInPackage?: string[];
 }
 
@@ -78,89 +74,47 @@ export async function promptTargetBase(
 }
 
 /**
- * Filters and prompts for the appropriate ABI based on the selected OS.
+ * Filters and prompts for the appropriate ABI based on the selected OS and language capabilities.
  */
 export async function promptAbi(
   artifactName: string,
   os: string,
   coverage: CoverageMap,
+  caps: LanguageCapabilities,
 ): Promise<string | undefined | symbol> {
-  const abis = [
-    { value: Abi.gnu, label: "GNU" },
-    { value: Abi.musl, label: "musl" },
-    { value: Abi.msvc, label: "MSVC" },
-  ];
+  const available = getAvailableAbis(artifactName, os, coverage, caps);
 
-  const allowed = abis.filter((a: { value: string; label: string }): boolean => {
-    const compatible = getCompatibleAbis(os);
-    return compatible.includes(a.value as (typeof Abi)[keyof typeof Abi]);
-  });
-
-  if (allowed.length === 0) {
+  if (available.length === 0) {
     return;
   }
 
-  const filtered = allowed.filter((opt: { value: string; label: string }): boolean => {
-    const key = `${artifactName}:${os}:${opt.value}`;
-    const covered = coverage.get(key) ?? new Set();
-    return covered.size < TOTAL_ARCHS;
-  });
-
-  if (filtered.length === 0) {
-    return;
+  const abiOptions = available.map((a) => ({ value: a, label: a.toUpperCase() }));
+  if (abiOptions.length === 1 && abiOptions[0]) {
+    logger.info(`ABI: ${pc.cyan(abiOptions[0].label)}`);
+    return abiOptions[0].value;
   }
 
-  if (filtered.length === 1 && filtered[0]) {
-    logger.info(`ABI: ${pc.cyan(filtered[0].label)}`);
-    return filtered[0].value;
-  }
-
-  return await step.select("ABI", filtered)();
+  return await step.select("ABI", abiOptions)();
 }
 
 /**
- * Filters and prompts for available architectures based on previous selections.
+ * Filters and prompts for available architectures based on previous selections and language capabilities.
  */
 export async function promptArchitectures(
   artifactName: string,
   os: string,
   abi: string | undefined,
   coverage: CoverageMap,
-): Promise<(keyof typeof Arch)[] | symbol> {
-  const allArchs = [
-    { value: Arch.x86_64, label: "x86_64" },
-    { value: Arch.arm64, label: "arm64" },
-    { value: Arch.armv7, label: "armv7" },
-    { value: Arch.x86, label: "x86" },
-    { value: Arch.wasm32, label: "wasm32" },
-  ].filter((opt) => {
-    if (os === "macos") {
-      return opt.value === Arch.arm64 || opt.value === Arch.x86_64 || opt.value === Arch.wasm32;
-    }
-    if (os === "windows") {
-      return opt.value !== Arch.armv7;
-    }
-    return true;
-  });
-
-  let abiKey = "none";
-  if (abi) {
-    abiKey = abi;
-  }
-
-  const key = `${artifactName}:${os}:${abiKey}`;
-  const covered = coverage.get(key) ?? new Set();
-  const available = allArchs.filter(
-    (opt: { value: string; label: string }): boolean => !covered.has(opt.value),
-  );
+  caps: LanguageCapabilities,
+): Promise<string[] | symbol> {
+  const available = getAvailableArchs(artifactName, os, abi, coverage, caps);
 
   if (available.length === 0) {
     return [];
   }
 
-  const archs = (await step.multiSelect("Architectures", available)()) as
-    | (keyof typeof Arch)[]
-    | symbol;
+  const archOptions = available.map((a) => ({ value: a, label: a }));
+  const archs = (await step.multiSelect("Architectures", archOptions)()) as string[] | symbol;
 
   if (isCancel(archs)) {
     return archs;
@@ -170,38 +124,33 @@ export async function promptArchitectures(
 }
 
 /**
- * Prompts for which package formats to build, filtered by OS.
+ * Prompts for which package formats to build, filtered by OS and language capabilities.
  */
 export async function promptPackages(
   os: string,
-): Promise<(typeof Package)[keyof typeof Package][] | symbol> {
-  const options: { value: string; label: string; hint?: string }[] = [
-    { value: Package.bin, label: "Binary", hint: "raw executable" },
-  ];
+  caps: LanguageCapabilities,
+): Promise<string[] | symbol> {
+  const osPackages = caps.packages.find((p) => p.os === os);
+  const options: { value: string; label: string; hint?: string }[] = (
+    osPackages?.packages ?? []
+  ).map((pkg) => {
+    const hints: Record<string, string> = {
+      bin: "raw executable",
+      "tar.gz": "compressed archive",
+      zip: "compressed archive",
+      deb: "Debian/Ubuntu package",
+      rpm: "Fedora/RHEL package",
+      msi: "Windows Installer",
+    };
+    const hint = hints[pkg];
+    return { value: pkg, label: pkg, ...(hint ? { hint } : {}) };
+  });
 
-  if (os === "linux") {
-    options.push(
-      { value: Package.tar_gz, label: "tar.gz", hint: "compressed archive" },
-      { value: Package.deb, label: ".deb", hint: "Debian/Ubuntu package" },
-      { value: Package.rpm, label: ".rpm", hint: "Fedora/RHEL package" },
-    );
-  } else if (os === "windows") {
-    options.push(
-      { value: Package.zip, label: "ZIP", hint: "compressed archive" },
-      { value: Package.msi, label: ".msi", hint: "Windows Installer" },
-    );
-  } else if (os === "macos") {
-    options.push({ value: Package.tar_gz, label: "tar.gz", hint: "compressed archive" });
+  if (options.length === 0) {
+    return [];
   }
 
-  let defaultArchive: string;
-  if (os === "windows") {
-    defaultArchive = Package.zip;
-  } else {
-    defaultArchive = Package.tar_gz;
-  }
-  const defaults = [Package.bin, defaultArchive];
-
+  const defaults = caps.defaultPackages.filter((p) => (osPackages?.packages ?? []).includes(p));
   const pkgs = await multiselect({
     message: "Package Formats",
     options,
@@ -213,7 +162,7 @@ export async function promptPackages(
     return pkgs;
   }
 
-  return pkgs as (typeof Package)[keyof typeof Package][];
+  return pkgs as string[];
 }
 
 /**
@@ -255,23 +204,20 @@ export async function createTargetObject({
   packages,
   includeInPackage,
 }: CreateTargetOptions): Promise<Target | undefined | symbol> {
-  const osType = baseInfo.os as (typeof Os)[keyof typeof Os];
-  const archTypes = archs as (typeof Arch)[keyof typeof Arch][];
-
   if (artifact.type === "bin") {
-    const binTarget: CommonBinaryTarget = {
+    const binTarget = {
       id: baseInfo.id,
       for: baseInfo.for,
-      type: "bin",
-      os: osType,
-      arch: archTypes,
-    };
+      type: "bin" as const,
+      os: baseInfo.os,
+      arch: archs,
+    } as CommonBinaryTarget;
 
     if (abi) {
-      binTarget.abi = abi as (typeof Abi)[keyof typeof Abi];
+      binTarget.abi = abi as CommonBinaryTarget["abi"];
     }
     if (packages && packages.length > 0) {
-      binTarget.packages = packages;
+      binTarget.packages = packages as CommonBinaryTarget["packages"];
     }
     if (includeInPackage && includeInPackage.length > 0) {
       binTarget.includeInPackage = includeInPackage;
@@ -285,17 +231,17 @@ export async function createTargetObject({
     return headers;
   }
 
-  const libTarget: CommonLibraryTarget = {
+  const libTarget = {
     id: baseInfo.id,
     for: baseInfo.for,
-    type: "lib",
-    os: osType,
-    arch: archTypes,
+    type: "lib" as const,
+    os: baseInfo.os,
+    arch: archs,
     headers: Boolean(headers),
-  };
+  } as CommonLibraryTarget;
 
   if (abi) {
-    libTarget.abi = abi as (typeof Abi)[keyof typeof Abi];
+    libTarget.abi = abi as CommonLibraryTarget["abi"];
   }
 
   return libTarget;

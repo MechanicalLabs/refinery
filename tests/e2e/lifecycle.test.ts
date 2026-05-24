@@ -64,7 +64,8 @@ describe("CLI E2E Lifecycle", () => {
       const { output, exitCode } = runInIsolatedDocker(["build", "--dry-run"], setup);
 
       expect(output).toContain("Dry-run mode enabled");
-      expect(output).toContain("cargo build --release --target x86_64-unknown-linux-gnu");
+      expect(output).toContain('CMD="cargo build --release"');
+      expect(output).toContain('CMD="$CMD --target x86_64-unknown-linux-gnu"');
       expect(output).toContain("Dry-run complete");
       expect(exitCode).toBe(0);
     },

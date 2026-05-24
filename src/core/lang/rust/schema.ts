@@ -1,10 +1,4 @@
 import { z } from "zod";
-import { createArtifactUnionHelper } from "../../../utils/create-artifact-union-helper";
-import { CommonBinaryArtifact, CommonLibraryArtifact } from "../common/schema/artifact";
-import { Target } from "../common/schema/index";
-import { validateConfigReferences, validateOutputNameCollisions } from "../common/vaildations";
-
-const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLibraryArtifact);
 
 const ReleaseSchema = z
   .object({
@@ -16,24 +10,10 @@ const ReleaseSchema = z
   .strict();
 
 /**
- * `refinery.toml` definition for `Rust` language.
+ * Rust-specific config schema (extends BaseConfigSchema at registration time).
  */
-export const RustConfigSchema = z
-  .object({
-    artifacts: z.array(Artifact).optional().default([]),
-    targets: z.array(Target).optional().default([]),
-    release: ReleaseSchema.optional(),
-    toolchain: z.string().optional().default("stable"),
-  })
-  .strict()
-  .superRefine(validateConfigReferences)
-  .superRefine(validateOutputNameCollisions);
-
-export type RustRelease = z.infer<typeof ReleaseSchema>;
-
-export const DEFAULT_RUST_RELEASE: RustRelease = {
-  strip: true,
-  lto: true,
-  codegenUnits: 1,
-  panic: "abort",
-};
+export const RustConfigSchema = z.object({
+  lang: z.literal("rust"),
+  release: ReleaseSchema.optional(),
+  toolchain: z.string().optional().default("stable"),
+});

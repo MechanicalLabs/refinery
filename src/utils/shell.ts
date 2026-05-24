@@ -17,7 +17,7 @@ export function sh(
   const execution = (async (): Promise<ShellOutput> => {
     // Use .nothrow() because we want to handle the exit code ourselves
     // and convert it into a Result.
-    const result = await $.nothrow()(strings, ...(values as any));
+    const result = await $.nothrow()(strings, ...(values as Parameters<typeof $>[1][]));
 
     return {
       stdout: result.stdout.toString().trim(),
@@ -37,7 +37,7 @@ export function shWithEnv(
 ): (strings: TemplateStringsArray, ...values: unknown[]) => AsyncResult<ShellOutput, Error> {
   return (strings: TemplateStringsArray, ...values: unknown[]) => {
     const execution = (async (): Promise<ShellOutput> => {
-      const result = await $.env(env).nothrow()(strings, ...(values as any));
+      const result = await $.env(env).nothrow()(strings, ...(values as Parameters<typeof $>[1][]));
 
       return {
         stdout: result.stdout.toString().trim(),

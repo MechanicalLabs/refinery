@@ -34,8 +34,7 @@
       "style": "error",
       "suspicious": {
         "recommended": true,
-        "noTemplateCurlyInString": "off",
-        "noExplicitAny": "off"
+        "noTemplateCurlyInString": "off"
       },
       "a11y": "error",
       "nursery": {

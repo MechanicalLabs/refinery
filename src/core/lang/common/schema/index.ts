@@ -1,7 +1,7 @@
-import { createArtifactUnionHelper } from "../../../../utils/create-artifact-union-helper";
+import { z } from "zod";
 import { CommonBinaryTarget, CommonLibraryTarget } from "./target";
 
 /**
  * --- TARGET TYPES ---
  */
-export const Target = createArtifactUnionHelper(CommonBinaryTarget, CommonLibraryTarget);
+export const Target = z.union([CommonBinaryTarget, CommonLibraryTarget]);

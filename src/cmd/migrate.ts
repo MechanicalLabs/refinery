@@ -8,57 +8,15 @@ import type { StrategyContext } from "../core/strategy/types";
 import { Errors } from "../errors";
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
-import { parseCargoToml } from "../utils/cargo";
 import { sh } from "../utils/shell";
 import type { Cmd } from "./types";
 
-async function validateArtifacts(config: {
-  lang: string;
-  artifacts?: { name: string; type: string }[];
-}): AsyncResult<void, Error> {
-  if (config.lang !== "rust") {
+async function validateArtifacts(config: RefineryConfig): AsyncResult<void, Error> {
+  const langResult = LanguageRegistry.get(config.lang);
+  if (!langResult.ok) {
     return Ok();
   }
-
-  const hasCargo = await exists("Cargo.toml");
-  if (!hasCargo.ok) {
-    return Ok();
-  }
-
-  const cargoResult = await readFile("Cargo.toml");
-  if (!cargoResult.ok) {
-    return Ok();
-  }
-
-  const info = parseCargoToml(cargoResult.value);
-  const cargoNames = new Set<string>();
-
-  let bins: string[];
-  if (info.binNames.length > 0) {
-    bins = info.binNames;
-  } else {
-    bins = [info.packageName];
-  }
-  for (const name of bins) {
-    cargoNames.add(name);
-  }
-  for (const name of info.libNames) {
-    cargoNames.add(name);
-  }
-
-  for (const artifact of config.artifacts ?? []) {
-    if (!cargoNames.has(artifact.name)) {
-      const err = Errors.artifactValidationFailed({
-        reason:
-          `Artifact '${artifact.name}' not found in Cargo.toml. ` +
-          `Expected one of: ${[...cargoNames].join(", ") || "(none)"}. ` +
-          "Run `refinery init` to regenerate artifact definitions from Cargo.toml.",
-      });
-      return Promise.resolve(Err(err));
-    }
-  }
-
-  return Ok();
+  return langResult.value.validateArtifacts(config);
 }
 
 async function validateTargets(config: RefineryConfig): AsyncResult<void, Error> {

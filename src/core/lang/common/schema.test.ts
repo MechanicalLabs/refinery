@@ -1,7 +1,7 @@
 /** biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: it's a test */
 /** biome-ignore-all lint/style/noNonNullAssertion: it's a test */
 import { describe, expect, test } from "bun:test";
-import { RustConfigSchema } from "../rust/schema";
+import { BaseConfigSchema } from "../../schema";
 import { CommonBinaryArtifact } from "./schema/artifact";
 import { CommonBinaryTarget } from "./schema/target";
 
@@ -37,9 +37,12 @@ describe("Common Schema", () => {
   });
 });
 
-describe("Rust Config Schema Cross-Validation", () => {
+describe("Base Config Schema Cross-Validation", () => {
   test("should fail if target.for points to non-existent artifact", () => {
-    const result = RustConfigSchema.safeParse({
+    const result = BaseConfigSchema.safeParse({
+      version: 1,
+      platform: "github",
+      lang: "rust",
       artifacts: [
         {
           type: "bin",
@@ -64,7 +67,10 @@ describe("Rust Config Schema Cross-Validation", () => {
   });
 
   test("should fail if target type does not match artifact type", () => {
-    const result = RustConfigSchema.safeParse({
+    const result = BaseConfigSchema.safeParse({
+      version: 1,
+      platform: "github",
+      lang: "rust",
       artifacts: [
         {
           type: "lib",
@@ -91,7 +97,10 @@ describe("Rust Config Schema Cross-Validation", () => {
   });
 
   test("should pass with correct references", () => {
-    const result = RustConfigSchema.safeParse({
+    const result = BaseConfigSchema.safeParse({
+      version: 1,
+      platform: "github",
+      lang: "rust",
       artifacts: [
         {
           type: "bin",

@@ -4,6 +4,8 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: test suite contains all GHA tests
 import { describe, expect, it } from "bun:test";
 import { load } from "js-yaml";
+import { Ok } from "ripthrow";
+import type { ShellOutput } from "../../../utils/shell";
 import { rustStrategy } from "../../lang/rust/strategy";
 import type { RefineryConfig } from "../../schema";
 import type { StrategyContext } from "../../strategy/types";
@@ -45,19 +47,21 @@ const createCtx = (c: RefineryConfig): StrategyContext => ({
   lang: rustStrategy,
   cwd: "/",
   sys: {
-    sh: () => ({}) as any,
+    sh: async () => Ok<ShellOutput, Error>({ stdout: "", stderr: "", exitCode: 0 }),
     fs: {
-      exists: () => ({}) as any,
-      readFile: () => ({}) as any,
-      writeFile: () => ({}) as any,
-      mkdir: () => ({}) as any,
+      exists: async () => Ok<void, Error>(),
+      readFile: async () => Ok<string, Error>(""),
+      writeFile: async () => Ok<number, Error>(0),
+      mkdir: async () => Ok<void, Error>(),
     },
   },
 });
 
 describe("GitHub workflow generation basics", () => {
   it("should generate valid YAML with correct matrix size", () => {
-    const yaml = buildWorkflowYaml(createCtx(config));
+    const yamlResult = buildWorkflowYaml(createCtx(config));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       name: string;
       jobs: { build: { strategy: { matrix: { include: unknown[] } } } };
@@ -68,7 +72,9 @@ describe("GitHub workflow generation basics", () => {
   });
 
   it("should resolve output names correctly in matrix", () => {
-    const yaml = buildWorkflowYaml(createCtx(config));
+    const yamlResult = buildWorkflowYaml(createCtx(config));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -89,7 +95,9 @@ describe("GitHub workflow generation basics", () => {
 
 describe("GitHub workflow release profile", () => {
   it("should include release profile env variables if configured", () => {
-    const yaml = buildWorkflowYaml(createCtx(config));
+    const yamlResult = buildWorkflowYaml(createCtx(config));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -142,7 +150,9 @@ describe("GitHub workflow packaging", () => {
   } as unknown as RefineryConfig;
 
   it("should set package flags and include_files in matrix entries", () => {
-    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(pkgConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -189,7 +199,9 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should include packaging install and build steps for deb/rpm/msi", () => {
-    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(pkgConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -199,9 +211,7 @@ describe("GitHub workflow packaging", () => {
     };
     const { steps } = parsed.jobs.build;
 
-    expect(steps.some((s: any) => s.name === "Configure Linker and System Dependencies")).toBe(
-      true,
-    );
+    expect(steps.some((s) => s.name === "Configure Linker and System Dependencies")).toBe(true);
     expect(steps.some((s) => s.name === "Install cargo-deb")).toBe(true);
     expect(steps.some((s) => s.name === "Build .deb package")).toBe(true);
     expect(steps.some((s) => s.name === "Install cargo-generate-rpm")).toBe(true);
@@ -214,7 +224,9 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should generate conditional steps with correct if expressions", () => {
-    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(pkgConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -235,7 +247,9 @@ describe("GitHub workflow packaging", () => {
   });
 
   it("should upload _packages directory as artifact", () => {
-    const yaml = buildWorkflowYaml(createCtx(pkgConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(pkgConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -316,7 +330,9 @@ describe("GitHub workflow hooks", () => {
   };
 
   it("should generate dynamic workflow with custom pre_build, post_build, and publish hooks", () => {
-    const yaml = buildWorkflowYaml(createCtx(hooksConfig as unknown as RefineryConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(hooksConfig as unknown as RefineryConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -379,7 +395,9 @@ describe("GitHub workflow library and WASM support", () => {
   } as unknown as RefineryConfig;
 
   it("should generate correct matrix entries for libraries and WebAssembly", () => {
-    const yaml = buildWorkflowYaml(createCtx(libConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(libConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -411,7 +429,9 @@ describe("GitHub workflow library and WASM support", () => {
   });
 
   it("should inject cbindgen installation step", () => {
-    const yaml = buildWorkflowYaml(createCtx(libConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(libConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -427,7 +447,9 @@ describe("GitHub workflow library and WASM support", () => {
   });
 
   it("should generate library packaging and export steps", () => {
-    const yaml = buildWorkflowYaml(createCtx(libConfig));
+    const yamlResult = buildWorkflowYaml(createCtx(libConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
     const parsed = load(yaml) as {
       jobs: {
         build: {
@@ -439,6 +461,11 @@ describe("GitHub workflow library and WASM support", () => {
     expect(steps.some((s) => s.name === "Prepare Library")).toBe(true);
     expect(steps.some((s) => s.name === "Export Library")).toBe(true);
     expect(steps.some((s) => s.name === "Package Library")).toBe(true);
+
+    const exportLib = steps.find((s) => s.name === "Export Library");
+    expect(exportLib?.if).toBe(
+      "matrix.artifact_type == 'lib' && (matrix.has_bin || !matrix.has_archive)",
+    );
   });
 });
 
@@ -448,18 +475,22 @@ describe("GitHub workflow toolchain pinning", () => {
       version: 1,
       lang: "rust",
       platform: "github",
-      toolchain: "1.85.0",
+      toolchain: "1.95.0",
       artifacts: [],
       targets: [],
     } as unknown as RefineryConfig;
 
-    const yaml = buildWorkflowYaml(createCtx(pinnedConfig));
-    const parsed = load(yaml) as any;
+    const yamlResult = buildWorkflowYaml(createCtx(pinnedConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
+    const parsed = load(yaml) as {
+      jobs: { build: { steps: { name: string; with?: { toolchain?: string } }[] } };
+    };
     const steps = parsed.jobs.build.steps;
 
-    const setupStep = steps.find((s: any) => s.name === "Setup Rust");
+    const setupStep = steps.find((s) => s.name === "Setup Rust");
     expect(setupStep).toBeDefined();
-    expect(setupStep.with?.toolchain).toBe("1.85.0");
+    expect(setupStep?.with?.toolchain).toBe("1.95.0");
   });
 
   it("should use stable as default toolchain", () => {
@@ -471,12 +502,16 @@ describe("GitHub workflow toolchain pinning", () => {
       targets: [],
     } as unknown as RefineryConfig;
 
-    const yaml = buildWorkflowYaml(createCtx(defaultConfig));
-    const parsed = load(yaml) as any;
+    const yamlResult = buildWorkflowYaml(createCtx(defaultConfig));
+    expect(yamlResult.ok).toBe(true);
+    const yaml = yamlResult.value;
+    const parsed = load(yaml) as {
+      jobs: { build: { steps: { name: string; with?: { toolchain?: string } }[] } };
+    };
     const steps = parsed.jobs.build.steps;
 
-    const setupStep = steps.find((s: any) => s.name === "Setup Rust");
+    const setupStep = steps.find((s) => s.name === "Setup Rust");
     expect(setupStep).toBeDefined();
-    expect(setupStep.with?.toolchain).toBe("stable");
+    expect(setupStep?.with?.toolchain).toBe("stable");
   });
 });

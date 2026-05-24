@@ -1,20 +1,9 @@
 // biome-ignore-all lint/style/useNamingConvention: Cargo env vars and triple names
 // biome-ignore-all lint/style/useExportsLast: Data-heavy registry file
 
-import type { Arch } from "../types/arch";
-import type { Os } from "../types/os";
+import type { TargetInfo } from "../../strategy/types";
 
-export interface TargetInfo {
-  triple: string;
-  os: (typeof Os)[keyof typeof Os];
-  arch: (typeof Arch)[keyof typeof Arch];
-  abi?: string;
-  linker?: string;
-  aptPackages: string[];
-  linkerEnv?: Record<string, string>;
-}
-
-const TARGETS: TargetInfo[] = [
+const RUST_TARGETS: TargetInfo[] = [
   // --- LINUX ---
   {
     triple: "x86_64-unknown-linux-gnu",
@@ -83,9 +72,20 @@ const TARGETS: TargetInfo[] = [
     arch: "armv7",
     abi: "gnueabihf",
     linker: "arm-linux-gnueabihf-gcc",
-    aptPackages: ["gcc-arm-linux-gnueabihf"],
+    aptPackages: ["gcc-arm-linux-gnueabihf", "libc6-dev-armhf-cross"],
     linkerEnv: {
       CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: "arm-linux-gnueabihf-gcc",
+    },
+  },
+  {
+    triple: "armv7-unknown-linux-musleabihf",
+    os: "linux",
+    arch: "armv7",
+    abi: "musl",
+    linker: "arm-linux-gnueabihf-gcc",
+    aptPackages: ["gcc-arm-linux-gnueabihf", "musl-tools"],
+    linkerEnv: {
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: "arm-linux-gnueabihf-gcc",
     },
   },
   {
@@ -167,36 +167,30 @@ const TARGETS: TargetInfo[] = [
   },
 ];
 
-export const TargetRegistry = {
-  all: () => TARGETS,
+export const RustTargets = {
+  all: (): TargetInfo[] => RUST_TARGETS,
 
-  find: (query: { os: string; arch: string; abi?: string | undefined }): TargetInfo | undefined => {
-    return TARGETS.find((t) => {
+  find: (query: { os: string; arch: string; abi?: string | undefined }): TargetInfo | undefined =>
+    RUST_TARGETS.find((t) => {
       const matchOs = t.os === query.os;
       const matchArch = t.arch === query.arch;
-
-      // Handle ABI normalization
       const targetAbi = t.abi;
       let queryAbi = query.abi;
-
-      if (query.os === "linux" && queryAbi === "gnu") {
+      if (query.os === "linux" && (queryAbi === "gnu" || queryAbi === "gnueabihf")) {
         queryAbi = undefined;
       }
       if (query.os === "windows" && queryAbi === "msvc") {
         queryAbi = undefined;
       }
-      // targetAbi is already normalized in the constant but let's be safe
       const normalizedTargetAbi =
-        (t.os === "linux" && targetAbi === "gnu") || (t.os === "windows" && targetAbi === "msvc")
+        (t.os === "linux" && (targetAbi === "gnu" || targetAbi === "gnueabihf")) ||
+        (t.os === "windows" && targetAbi === "msvc")
           ? undefined
           : targetAbi;
-
       const matchAbi = normalizedTargetAbi === queryAbi;
-
       return matchOs && matchArch && matchAbi;
-    });
-  },
+    }),
 
   getByTriple: (triple: string, os?: string): TargetInfo | undefined =>
-    TARGETS.find((t) => t.triple === triple && (os ? t.os === os : true)),
+    RUST_TARGETS.find((t) => t.triple === triple && (os ? t.os === os : true)),
 };

@@ -1,97 +1,41 @@
 import path from "node:path";
 import { isCancel } from "@clack/prompts";
-import { buildAsync, Err, kindOf, matchErr, Ok, type Result } from "ripthrow";
-import { exists, readFile } from "../../core/io/fs";
+import { Ok } from "ripthrow";
 import type {
   CommonBinaryArtifact,
   CommonLibraryArtifact,
 } from "../../core/lang/common/schema/artifact";
-import { type AppError, Errors } from "../../errors";
+import { LanguageRegistry } from "../../core/strategy/registry";
 import { logger } from "../../ui/log";
 import { type PromptGroup, step, toUiValidator } from "../../ui/prompt";
-import { parseCargoToml } from "../../utils/cargo";
 import { slugify, validateName } from "../../utils/naming";
 
 type Artifact = CommonBinaryArtifact | CommonLibraryArtifact;
 
-function detectRustArtifacts(content: string): Artifact[] {
-  const info = parseCargoToml(content);
-  const artifacts: Artifact[] = [];
-
-  let bins: string[];
-  if (info.binNames.length > 0) {
-    bins = info.binNames;
-  } else {
-    bins = [info.packageName];
-  }
-  for (const name of bins) {
-    artifacts.push({ type: "bin", name, outputName: "{name}-{os}-{arch}" });
-  }
-
-  for (const name of info.libNames) {
-    artifacts.push({ type: "lib", name, headers: false });
-  }
-
-  return artifacts;
-}
-
-/**
- * Probes for Cargo.toml and auto-detects artifacts.
- * Uses matchErr to provide specific feedback.
- */
-function promptRustArtifacts(): Promise<Artifact[] | undefined> {
-  return buildAsync(exists("Cargo.toml"))
-    .note("Checking for Cargo.toml")
-    .mapErr((err): AppError => {
-      if (kindOf(err) === "ioFileNotFound") {
-        return Errors.ioFileNotFound({ path: "Cargo.toml" });
-      }
-      return Errors.validationError({ reason: String(err) });
-    })
-    .andThen(
-      () =>
-        buildAsync(readFile("Cargo.toml")).mapErr(
-          (err): AppError => Errors.validationError({ reason: String(err) }),
-        ).result,
-    )
-    .note("Reading Cargo.toml")
-    .map(detectRustArtifacts)
-    .match({
-      ok: (artifacts: Artifact[]): Artifact[] | undefined => {
-        if (artifacts.length === 0) {
-          logger.error("No binaries or libraries found in Cargo.toml.");
-          return undefined;
-        }
-
-        logger.info(`Detected ${artifacts.length} artifact(s) from Cargo.toml:`);
-        for (const a of artifacts) {
-          const label = a.type === "bin" ? "bin" : "lib";
-          logger.info(`  ${label}: ${a.name}`);
-        }
-        return artifacts;
-      },
-      err: (err): Artifact[] | undefined =>
-        matchErr(Err(err) as Result<never, AppError>)
-          .on(Errors.ioFileNotFound, () => {
-            logger.error("No Cargo.toml found. Run `cargo init` or `cargo new` first.");
-            return undefined;
-          })
-          .otherwise((e) => {
-            logger.error(`Failed to read Cargo.toml: ${e.message}`);
-            return undefined;
-          }),
-    });
-}
-
 /**
  * Interactive wizard to define one or more project artifacts.
- * For Rust, artifacts are auto-detected from Cargo.toml.
+ * Delegates auto-detection to the selected language strategy.
  */
 async function promptArtifacts(ui: PromptGroup, language: string): Promise<Artifact[] | undefined> {
-  if (language === "rust") {
-    return promptRustArtifacts();
+  const langResult = LanguageRegistry.get(language);
+  if (!langResult.ok) {
+    logger.error(`Language '${language}' is not supported.`);
+    return undefined;
+  }
+  const lang = langResult.value;
+
+  // Try auto-detection first
+  const detectResult = await lang.detectArtifacts(process.cwd());
+  if (detectResult.ok && detectResult.value.length > 0) {
+    logger.info(`Detected ${detectResult.value.length} artifact(s):`);
+    for (const a of detectResult.value) {
+      const label = a.type === "bin" ? "bin" : "lib";
+      logger.info(`  ${label}: ${a.name}`);
+    }
+    return detectResult.value;
   }
 
+  // Fall back to manual artifact prompt
   const artifacts: Artifact[] = [];
   const folderName = slugify(path.basename(process.cwd()));
 

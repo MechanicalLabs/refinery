@@ -3,7 +3,6 @@ import pc from "picocolors";
 import { type AsyncResult, buildAsync, ResultBuilder } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../../core/io/fs";
 import { saveManifest } from "../../core/io/manifest";
-import { DEFAULT_RUST_RELEASE } from "../../core/lang/rust/schema";
 import type { RefineryConfig } from "../../core/schema";
 import { LanguageRegistry, PlatformRegistry } from "../../core/strategy/registry";
 import type {
@@ -57,9 +56,15 @@ function createInitialManifest(ctx: InitContext): AsyncResult<InitContextWithMan
     targets: ctx.answers.targets,
   } as RefineryConfig;
 
-  if (ctx.answers.language === "rust") {
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
-    (manifest as Record<string, unknown>)["release"] = DEFAULT_RUST_RELEASE;
+  const initialConfig = ctx.lang.getInitialConfig(path.basename(process.cwd()));
+  const extra = { ...initialConfig } as Record<string, unknown>;
+  extra["lang"] = undefined;
+  extra["artifacts"] = undefined;
+  extra["targets"] = undefined;
+  for (const [k, v] of Object.entries(extra)) {
+    if (v !== undefined) {
+      (manifest as Record<string, unknown>)[k] = v;
+    }
   }
 
   return buildAsync(saveManifest(manifest))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseCargoToml } from "./cargo";
+import { parseCargoToml } from "./cargo.ts";
 
 describe("cargo utility", () => {
   it("should parse a simple Cargo.toml", () => {

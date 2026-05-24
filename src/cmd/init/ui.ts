@@ -55,7 +55,7 @@ export async function promptUser(): Promise<ProjectAnswers | undefined> {
     return;
   }
 
-  const targets = await promptTargets(artifacts);
+  const targets = await promptTargets(artifacts, baseAnswers.language);
   if (!targets) {
     return;
   }

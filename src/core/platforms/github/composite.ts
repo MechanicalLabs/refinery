@@ -1,9 +1,9 @@
 import { load } from "js-yaml";
 import { type AsyncResult, Err, Ok, safe } from "ripthrow";
-import { exists, readFile } from "../core/io/fs";
-import { Errors } from "../errors";
-import { logger } from "../ui/log";
-import { sh } from "./shell";
+import { Errors } from "../../../errors";
+import { logger } from "../../../ui/log";
+import { sh } from "../../../utils/shell";
+import { exists, readFile } from "../../io/fs";
 
 interface ActionStep {
   run?: string;

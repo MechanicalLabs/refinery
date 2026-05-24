@@ -40,8 +40,11 @@ describe("migrate logic", () => {
     );
 
     const config = {
+      version: 1 as const,
+      platform: "github" as const,
       lang: "rust",
       artifacts: [{ type: "bin" as const, name: "wrong-name" }],
+      targets: [],
     };
 
     const result = await validateArtifacts(config);

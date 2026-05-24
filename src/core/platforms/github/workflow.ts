@@ -1,9 +1,11 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
 import { dump } from "js-yaml";
-import type { PublishStep, RefineryConfig } from "../../schema";
-import type { StrategyContext } from "../../strategy/types";
+import { Ok, type Result } from "ripthrow";
+import type { RefineryConfig, RefineryConfigTarget } from "../../../core/schema";
+import type { StrategyContext } from "../../../core/strategy/types";
+import { type AppError, Errors } from "../../../errors";
 import { Actions } from "./constants";
-import { buildMatrix, buildReleaseEnv } from "./matrix";
+import { buildMatrix, type MatrixEntry } from "./matrix";
 import { buildSteps } from "./steps";
 
 interface Step {
@@ -140,9 +142,8 @@ function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | unde
   };
 }
 
-function buildJobs(ctx: StrategyContext): Record<string, unknown> {
-  const matrix = buildMatrix(ctx.config);
-  const buildEnv = buildReleaseEnv(ctx.config) ?? {};
+function buildJobs(ctx: StrategyContext, matrix: MatrixEntry[]): Record<string, unknown> {
+  const buildEnv = ctx.lang.getBuildEnv(ctx.config);
 
   const jobs: Record<string, unknown> = {
     build: {
@@ -168,15 +169,18 @@ function buildJobs(ctx: StrategyContext): Record<string, unknown> {
   return jobs;
 }
 
-export function buildWorkflowYaml(ctx: StrategyContext): string {
+export function buildWorkflowYaml(ctx: StrategyContext): Result<string, AppError> {
+  const matrixResult = buildMatrix(ctx.config);
+  if (!matrixResult.ok) return matrixResult;
+
   const workflow = {
     name: "Refinery Build",
     on: {
       push: { tags: ["v*"] },
       release: { types: ["created"] },
     },
-    jobs: buildJobs(ctx),
+    jobs: buildJobs(ctx, matrixResult.value),
   };
 
-  return dump(workflow, { lineWidth: 120, noRefs: true, quotingType: '"' });
+  return Ok(dump(workflow, { lineWidth: 120, noRefs: true, quotingType: '"' }));
 }

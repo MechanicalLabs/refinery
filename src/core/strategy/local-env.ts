@@ -3,8 +3,7 @@ import { type AsyncResult, Err, Ok } from "ripthrow";
 import { Errors } from "../../errors";
 import { logger } from "../../ui/log";
 import { sh } from "../../utils/shell";
-import { TargetRegistry } from "./target-registry";
-import type { TargetMetadata } from "./types";
+import type { LanguageStrategy, TargetMetadata } from "./types";
 
 /**
  * Shared logic for managing local toolchains and system dependencies.
@@ -66,8 +65,12 @@ export const LocalEnv = {
   /**
    * Installs required system dependencies (e.g. via apt-get) for a given target.
    */
-  async installSystemDeps(target: TargetMetadata, dryRun = false): AsyncResult<void, Error> {
-    const targetInfo = TargetRegistry.getByTriple(target.triple, target.os);
+  async installSystemDeps(
+    target: TargetMetadata,
+    lang: LanguageStrategy,
+    dryRun = false,
+  ): AsyncResult<void, Error> {
+    const targetInfo = lang.getTargetInfo(target.os, target.arch, target.abi);
     const apt = [...(targetInfo?.aptPackages ?? [])];
 
     if (target.packages.includes("rpm") && !apt.includes("rpm")) {

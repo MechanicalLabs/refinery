@@ -11,11 +11,13 @@ export const githubStrategy: PlatformStrategy = {
   onInit: (_ctx: StrategyContext): AsyncResult<void, Error> => Promise.resolve(Ok()),
   migrate: (ctx: StrategyContext): AsyncResult<void, Error> =>
     buildAsync(ctx.sys.fs.mkdir(path.join(ctx.cwd, WORKFLOW_DIR)))
-      .andThen(() =>
-        ctx.sys.fs.writeFile(
+      .andThen(() => {
+        const yamlResult = buildWorkflowYaml(ctx);
+        if (!yamlResult.ok) return Promise.resolve(yamlResult);
+        return ctx.sys.fs.writeFile(
           path.join(ctx.cwd, WORKFLOW_DIR, "refinery-build.yml"),
-          buildWorkflowYaml(ctx),
-        ),
-      )
+          yamlResult.value,
+        );
+      })
       .map(() => undefined).result,
 };

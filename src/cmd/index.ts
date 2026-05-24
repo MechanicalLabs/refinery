@@ -4,6 +4,7 @@
  */
 
 import { Command } from "commander";
+import type { Report } from "ripthrow";
 import { getMeta } from "../macros.ts" with { type: "macro" };
 import { printBranding } from "../ui";
 import { logger } from "../ui/log";
@@ -51,7 +52,7 @@ for (const cmd of CommandRegistry.all()) {
 
       // Process Result/AsyncResult outcomes
       if (result && typeof result === "object" && "ok" in result && !result.ok) {
-        const err = result.error as any;
+        const err = (result as { ok: false; error: Report }).error;
         logger.fail(err);
 
         // Render contextual traceability notes
@@ -59,11 +60,6 @@ for (const cmd of CommandRegistry.all()) {
           for (const note of err.notes) {
             logger.info(`  └ ${note}`);
           }
-        }
-
-        // Render help instructions
-        if (err.help) {
-          logger.info(`\nHelp: ${err.help}`);
         }
 
         process.exit(1);
