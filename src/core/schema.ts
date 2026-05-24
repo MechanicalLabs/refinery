@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { RustConfigSchema } from "./lang/rust/schema";
+import { createArtifactUnionHelper } from "../utils/create-artifact-union-helper";
+import { CommonBinaryArtifact, CommonLibraryArtifact } from "./lang/common/schema/artifact";
+import { Target } from "./lang/common/schema/index";
+import { validateConfigReferences } from "./lang/common/vaildations";
+
+const Artifact = createArtifactUnionHelper(CommonBinaryArtifact, CommonLibraryArtifact);
 
 const TargetsUnion = z.union([z.literal("once"), z.literal("all"), z.array(z.string())]).optional();
 
@@ -62,33 +67,32 @@ const PublishBuiltinSchema = z
 const PublishStepSchema = z.discriminatedUnion("type", [PublishBuiltinSchema, CompositeStepSchema]);
 
 /**
- * LANG REGISTRIES
- *
- * NOTE: Must use `.extend()` (not manual shape spread) to preserve
- * `.superRefine()` calls from the language schema (collision detection, etc.).
+ * Base config schema shared across all languages.
+ * Language-specific fields are validated separately via each strategy's configSchema.
  */
-const RefineryConfigSchema = z.discriminatedUnion("lang", [
-  RustConfigSchema.extend({
+export const BaseConfigSchema = z
+  .object({
     version: z.literal(1).describe("The version of the refinery configuration schema."),
     platform: z.enum(["github"]),
-    lang: z.literal("rust"),
+    lang: z.string(),
+    artifacts: z.array(Artifact).optional().default([]),
+    targets: z.array(Target).optional().default([]),
     // biome-ignore lint/style/useNamingConvention: TOML key
     pre_build: z.array(PreBuildStepSchema).optional(),
     // biome-ignore lint/style/useNamingConvention: TOML key
     post_build: z.array(PostBuildStepSchema).optional(),
     publish: z.array(PublishStepSchema).optional(),
-  }).strict(),
-]);
+  })
+  .passthrough()
+  .superRefine((data, ctx) => {
+    validateConfigReferences(data as Parameters<typeof validateConfigReferences>[0], ctx);
+  });
 
-type PreBuildStep = z.infer<typeof PreBuildStepSchema>;
-type PostBuildStep = z.infer<typeof PostBuildStepSchema>;
-type PublishStep = z.infer<typeof PublishStepSchema>;
-type RefineryConfig = z.infer<typeof RefineryConfigSchema>;
-
-export {
-  type PostBuildStep,
-  type PreBuildStep,
-  type PublishStep,
-  type RefineryConfig,
-  RefineryConfigSchema,
-};
+/**
+ * RefineryConfig is the union of BaseConfig with language-specific extensions.
+ * The exact shape depends on the lang field, resolved at runtime via LanguageRegistry.
+ */
+export type PreBuildStep = z.infer<typeof PreBuildStepSchema>;
+export type PostBuildStep = z.infer<typeof PostBuildStepSchema>;
+export type PublishStep = z.infer<typeof PublishStepSchema>;
+export type RefineryConfig = z.infer<typeof BaseConfigSchema> & Record<string, unknown>;
