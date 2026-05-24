@@ -109,14 +109,21 @@ function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | unde
   }
 
   const steps: Step[] = [];
-  if (activeSteps.some((s) => s.type === "composite")) {
+  const compositeSteps = activeSteps.filter((s) => s.type === "composite");
+  const builtinSteps = activeSteps.filter((s) => s.type === "builtin");
+
+  if (compositeSteps.length > 0) {
     steps.push({
       name: "Checkout repository",
       uses: Actions.checkout,
     });
   }
 
-  for (const step of activeSteps) {
+  for (const step of compositeSteps) {
+    steps.push(...translatePublishStep(step));
+  }
+
+  for (const step of builtinSteps) {
     steps.push(...translatePublishStep(step));
   }
 
