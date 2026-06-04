@@ -1,6 +1,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: sequential builds are intentional
 // biome-ignore-all lint/complexity/useLiteralKeys: bracket notation needed for TS index sig
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: build command contains sequential execution logic that is cohesive
+import path from "node:path";
 import pc from "picocolors";
 import { type AsyncResult, buildAsync, Err, Ok } from "ripthrow";
 import { exists, mkdir, readFile, writeFile } from "../core/io/fs";
@@ -204,12 +205,6 @@ async function executeAbstractStep(
           }
         }
         return Ok();
-      case "package":
-        if (dryRun) {
-          logger.info(pc.dim("  [dry-run] Package artifacts (not implemented locally)"));
-        }
-        // TODO: Implement local packaging
-        return Ok();
       default:
         return Ok();
     }
@@ -318,7 +313,7 @@ async function runBuild(
   }
 
   const ctx: StrategyContext = {
-    projectName: "refinery", // TODO: Get actual project name
+    projectName: path.basename(process.cwd()),
     config,
     lang: langResult.value,
     cwd: process.cwd(),
