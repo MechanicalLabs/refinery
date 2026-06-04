@@ -34,12 +34,6 @@ const config = {
       packages: ["tar.gz"],
     },
   ],
-  release: {
-    strip: true,
-    lto: true,
-    codegenUnits: 1,
-    panic: "abort",
-  },
 } as unknown as RefineryConfig;
 const createCtx = (c: RefineryConfig): StrategyContext => ({
   projectName: "test-app",
@@ -90,27 +84,6 @@ describe("GitHub workflow generation basics", () => {
 
     expect(matrix[0]?.output_name).toBe("my-app-linux-x86_64");
     expect(matrix[1]?.output_name).toBe("my-app-macos-arm64");
-  });
-});
-
-describe("GitHub workflow release profile", () => {
-  it("should include release profile env variables if configured", () => {
-    const yamlResult = buildWorkflowYaml(createCtx(config));
-    expect(yamlResult.ok).toBe(true);
-    const yaml = unwrap(yamlResult);
-    const parsed = load(yaml) as {
-      jobs: {
-        build: {
-          env: Record<string, string>;
-        };
-      };
-    };
-    const { env } = parsed.jobs.build;
-
-    expect(env?.["CARGO_PROFILE_RELEASE_STRIP"]).toBe("symbols");
-    expect(env?.["CARGO_PROFILE_RELEASE_LTO"]).toBe("true");
-    expect(env?.["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"]).toBe("1");
-    expect(env?.["CARGO_PROFILE_RELEASE_PANIC"]).toBe("abort");
   });
 });
 

@@ -384,25 +384,5 @@ export const rustStrategy: LanguageStrategy = {
 
   getTargetInfo: (os: string, arch: string, abi?: string) => RustTargets.find({ os, arch, abi }),
 
-  getBuildEnv: (config) => {
-    const cfg = config as Record<string, unknown>;
-    const release = cfg["release"] as Record<string, unknown> | undefined;
-    if (!release) {
-      return {};
-    }
-    const env: Record<string, string> = {};
-    if (release["strip"]) {
-      env["CARGO_PROFILE_RELEASE_STRIP"] = "symbols";
-    }
-    if (release["lto"]) {
-      env["CARGO_PROFILE_RELEASE_LTO"] = "true";
-    }
-    if (release["codegenUnits"] && (release["codegenUnits"] as number) > 0) {
-      env["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] = String(release["codegenUnits"]);
-    }
-    if (release["panic"] === "abort") {
-      env["CARGO_PROFILE_RELEASE_PANIC"] = "abort";
-    }
-    return env;
-  },
+  getBuildEnv: () => ({}),
 };
