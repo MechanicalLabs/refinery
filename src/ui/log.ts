@@ -40,10 +40,6 @@ export const logger = {
     console.log(withIcon(DONE_ICON, ...args));
   },
 
-  suggestion(...args: unknown[]): void {
-    console.log(withIcon(INFO_ICON, pc.dim(args.join(" "))));
-  },
-
   fail(err: unknown, ...extra: unknown[]): void {
     if (err instanceof Error) {
       logger.error(err.message, ...extra);

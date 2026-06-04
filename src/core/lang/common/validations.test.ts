@@ -3,11 +3,7 @@ import type { z } from "zod";
 import { Abi } from "../../types/abi";
 import { Os } from "../../types/os";
 import { Package } from "../../types/packages";
-import {
-  validateBinaryTarget,
-  validateConfigReferences,
-  validateOutputNameCollisions,
-} from "./vaildations";
+import { validateBinaryTarget, validateConfigReferences } from "./vaildations";
 
 const createMockCtx = (): z.RefinementCtx => {
   const issues: z.ZodIssue[] = [];
@@ -155,53 +151,6 @@ describe("validateConfigReferences", () => {
         targets: [
           { id: "t1", for: "app", type: "bin" },
           { id: "t2", for: "app", type: "lib" },
-        ],
-      },
-      ctx,
-    );
-    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues).toHaveLength(0);
-  });
-});
-
-describe("validateOutputNameCollisions", () => {
-  it("should reject colliding output names", () => {
-    const ctx = createMockCtx();
-    validateOutputNameCollisions(
-      {
-        artifacts: [{ name: "app", type: "bin", outputName: "static-name" }],
-        targets: [{ id: "t1", for: "app", os: "linux", arch: ["x86_64", "arm64"] }],
-      },
-      ctx,
-    );
-    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues).toHaveLength(1);
-    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues[0]?.message).toContain(
-      "output name collision",
-    );
-  });
-
-  it("should allow unique output names via patterns", () => {
-    const ctx = createMockCtx();
-    validateOutputNameCollisions(
-      {
-        artifacts: [{ name: "app", type: "bin", outputName: "{name}-{os}-{arch}" }],
-        targets: [{ id: "t1", for: "app", os: "linux", arch: ["x86_64", "arm64"] }],
-      },
-      ctx,
-    );
-    expect((ctx as unknown as { issues: z.ZodIssue[] }).issues).toHaveLength(0);
-  });
-
-  it("should not collide output names if targets have different types", () => {
-    const ctx = createMockCtx();
-    validateOutputNameCollisions(
-      {
-        artifacts: [
-          { name: "app", type: "bin", outputName: "static-name" },
-          { name: "app", type: "lib" },
-        ],
-        targets: [
-          { id: "t1", for: "app", type: "bin", os: "linux", arch: ["x86_64"] },
-          { id: "t2", for: "app", type: "lib", os: "linux", arch: ["x86_64"] },
         ],
       },
       ctx,

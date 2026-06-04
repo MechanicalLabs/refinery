@@ -168,8 +168,6 @@ const RUST_TARGETS: TargetInfo[] = [
 ];
 
 export const RustTargets = {
-  all: (): TargetInfo[] => RUST_TARGETS,
-
   find: (query: { os: string; arch: string; abi?: string | undefined }): TargetInfo | undefined =>
     RUST_TARGETS.find((t) => {
       const matchOs = t.os === query.os;
@@ -190,7 +188,4 @@ export const RustTargets = {
       const matchAbi = normalizedTargetAbi === queryAbi;
       return matchOs && matchArch && matchAbi;
     }),
-
-  getByTriple: (triple: string, os?: string): TargetInfo | undefined =>
-    RUST_TARGETS.find((t) => t.triple === triple && (os ? t.os === os : true)),
 };

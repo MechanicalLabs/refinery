@@ -43,7 +43,6 @@ export const Actions = {
   uploadArtifact: "actions/upload-artifact@v7",
   downloadArtifact: "actions/download-artifact@v8",
   ghRelease: "softprops/action-gh-release@v3",
-  createPullRequest: "peter-evans/create-pull-request@v8",
   installAction: "taiki-e/install-action@v2",
   setupMingw: "egor-tensin/setup-mingw@v3",
 } as const;
