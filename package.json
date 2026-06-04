@@ -1,5 +1,5 @@
 {
-  "name": "@mlabs/refinery",
+  "name": "@mechlabs/refinery",
   "module": "src/index.ts",
   "version": "1.0.0",
   "type": "module",
