@@ -93,7 +93,7 @@ export async function resolveComposite(
 
   const parsed = parseResult.value;
   const { runs } = parsed;
-  if (!runs || runs.using !== "composite" || !runs.steps) {
+  if (runs?.using !== "composite" || !runs.steps) {
     return Err(Errors.invalidCompositeAction({ path: actionPath }));
   }
 
