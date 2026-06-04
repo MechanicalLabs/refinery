@@ -18,7 +18,6 @@ export interface MatrixEntry {
   output_name: string;
   artifact_bin: string;
   target_triple: string;
-  package_type: string;
   packages: string[];
   has_deb: boolean;
   has_rpm: boolean;
@@ -164,7 +163,6 @@ function buildBaseEntry(
     output_name: outputName,
     artifact_bin: artifact.name,
     target_triple: targetInfo.triple,
-    package_type: target.os === "windows" ? "zip" : "tar.gz",
     packages: target.packages || [],
     ...pkgFlags,
     include_files: target.includeInPackage ?? [],

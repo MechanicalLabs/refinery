@@ -105,10 +105,6 @@ const PACKAGE_CONDITIONS: Record<string, string> = {
   ".rpm": "${{ matrix.has_rpm }}",
   ".msi": "${{ matrix.has_msi }}",
   "cargo-wix": "${{ matrix.has_msi }}",
-  deb: "${{ matrix.has_deb }}",
-  rpm: "${{ matrix.has_rpm }}",
-  msi: "${{ matrix.has_msi }}",
-  wix: "${{ matrix.has_msi }}",
 };
 
 /**
