@@ -22,4 +22,5 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - run: bun test
+      - run: bun run build
       - run: npm publish --provenance --access public

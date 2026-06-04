@@ -1,9 +1,13 @@
 {
   "name": "@mechlabs/refinery",
-  "module": "src/index.ts",
+  "module": "dist/index.js",
   "version": "1.0.0",
   "type": "module",
   "private": false,
+  "files": [
+    "dist",
+    "src"
+  ],
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@types/bun": "latest",
@@ -15,7 +19,7 @@
     "typescript": "^6.0.3"
   },
   "bin": {
-    "refinery": "./src/index.ts"
+    "refinery": "./dist/index.js"
   },
   "scripts": {
     "format": "bun x @biomejs/biome format --write .",
@@ -29,6 +33,7 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
     "build:binary": "bun build ./src/index.ts --compile --outfile dist/refinery"
   },
   "dependencies": {
