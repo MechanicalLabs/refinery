@@ -193,7 +193,9 @@ export function buildMatrix(config: RefineryConfig): Result<MatrixEntry[], AppEr
   const entries: MatrixEntry[] = [];
 
   for (const artifact of config.artifacts) {
-    const targets = config.targets.filter((t) => t.for === artifact.name);
+    const targets = config.targets.filter(
+      (t) => t.for === artifact.name && (t.type === undefined || t.type === artifact.type),
+    );
 
     for (const target of targets) {
       for (const arch of target.arch) {
