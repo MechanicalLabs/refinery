@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: YAML output keys
 import { dump } from "js-yaml";
 import { Ok, type Result } from "ripthrow";
+import type { CommonLibraryArtifact } from "../../../core/lang/common/schema/artifact";
 import type { PublishStep, RefineryConfig } from "../../../core/schema";
 import type { StrategyContext } from "../../../core/strategy/types";
 import type { AppError } from "../../../errors";
@@ -101,7 +102,60 @@ function getPublishSteps(config: RefineryConfig): PublishStep[] {
   return defaultPublish;
 }
 
-function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | undefined {
+function buildHeadersJob(config: RefineryConfig): Record<string, unknown> | undefined {
+  const libArtifacts = config.artifacts.filter(
+    (a): a is CommonLibraryArtifact => a.type === "lib" && a.headers === true,
+  );
+  if (libArtifacts.length === 0) {
+    return;
+  }
+
+  const steps: Step[] = [];
+
+  steps.push({ name: "Checkout", uses: Actions.checkout });
+
+  steps.push({
+    name: "Install cbindgen",
+    uses: Actions.installAction,
+    with: { tool: "cbindgen" },
+  });
+
+  for (const artifact of libArtifacts) {
+    const cmds = [
+      'if [ -f "cbindgen.toml" ]; then',
+      `  cbindgen --config cbindgen.toml --crate "${artifact.name}" --output "${artifact.name}.h"`,
+      "else",
+      `  cbindgen --crate "${artifact.name}" --output "${artifact.name}.h"`,
+      "fi",
+    ];
+    steps.push({
+      name: `Generate ${artifact.name}.h`,
+      run: cmds.join("\n"),
+      shell: "bash",
+    });
+  }
+
+  steps.push({
+    name: "Upload Headers",
+    uses: Actions.uploadArtifact,
+    with: {
+      name: "headers-artifacts",
+      path: "*.h",
+    },
+  });
+
+  return {
+    name: "Generate C Headers",
+    "runs-on": "ubuntu-latest",
+    permissions: { contents: "read" },
+    steps,
+  };
+}
+
+function buildReleaseJob(
+  config: RefineryConfig,
+  needs: string[],
+): Record<string, unknown> | undefined {
   const publishSteps = getPublishSteps(config);
   const activeSteps = publishSteps.filter((s) => s.enabled !== false);
   if (activeSteps.length === 0) {
@@ -141,7 +195,7 @@ function buildReleaseJob(config: RefineryConfig): Record<string, unknown> | unde
 
   return {
     name: "Release Artifacts",
-    needs: ["build"],
+    needs,
     "runs-on": "ubuntu-latest",
     if: "startsWith(github.ref, 'refs/tags/')",
     permissions,
@@ -170,7 +224,16 @@ function buildJobs(ctx: StrategyContext, matrix: MatrixEntry[]): Record<string, 
     },
   };
 
-  const releaseJob = buildReleaseJob(ctx.config);
+  const releaseNeeds = ["build"];
+
+  const headersJob = buildHeadersJob(ctx.config);
+  if (headersJob) {
+    // biome-ignore lint/complexity/useLiteralKeys: GHA
+    jobs["generate_headers"] = headersJob;
+    releaseNeeds.push("generate_headers");
+  }
+
+  const releaseJob = buildReleaseJob(ctx.config, releaseNeeds);
   if (releaseJob) {
     // biome-ignore lint/complexity/useLiteralKeys: GHA
     jobs["release"] = releaseJob;
