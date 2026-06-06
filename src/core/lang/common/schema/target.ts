@@ -50,7 +50,7 @@ export const CommonBinaryTarget = BaseTargetSchema.extend({
  */
 export const CommonLibraryTarget = BaseTargetSchema.extend({
   type: z.literal("lib").optional(),
-  headers: z.boolean().optional().default(false),
+  headers: z.boolean().optional(),
 })
   .strict()
   .superRefine(validateBinaryTarget);
