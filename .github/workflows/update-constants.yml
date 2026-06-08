@@ -47,7 +47,7 @@ jobs:
           for repo in "${REPOS[@]}"; do
             echo "Checking $repo..."
 
-            CURRENT_VER=$(grep -o "$repo@v[^\" ]*" "$CONSTANTS_FILE" | cut -d'@' -f2)
+            CURRENT_VER=$(grep -o "$repo@v[^\" ]*" "$CONSTANTS_FILE" | cut -d'@' -f2 || true)
             if [ -z "$CURRENT_VER" ]; then
               echo "  No current version found, skipping."
               continue

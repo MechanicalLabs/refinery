@@ -44,6 +44,7 @@ export const Actions = {
   downloadArtifact: "actions/download-artifact@v8",
   ghRelease: "softprops/action-gh-release@v3",
   installAction: "taiki-e/install-action@v2",
+  createPullRequest: "peter-evans/create-pull-request@v8",
   setupMingw: "egor-tensin/setup-mingw@v3",
 } as const;
 
