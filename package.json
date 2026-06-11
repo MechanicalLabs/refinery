@@ -17,8 +17,8 @@
     "@biomejs/biome": "2.4.16",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.9.1",
-    "knip": "^6.15.0"
+    "@types/node": "^25.9.3",
+    "knip": "^6.16.1"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
