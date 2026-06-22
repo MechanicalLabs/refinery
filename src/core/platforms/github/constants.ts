@@ -38,7 +38,7 @@
  */
 
 export const Actions = {
-  checkout: "actions/checkout@v6",
+  checkout: "actions/checkout@v7",
   setupRust: "actions-rust-lang/setup-rust-toolchain@v1",
   uploadArtifact: "actions/upload-artifact@v7",
   downloadArtifact: "actions/download-artifact@v8",
