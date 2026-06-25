@@ -14,11 +14,11 @@
     "url": "git+https://github.com/MechanicalLabs/refinery.git"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
+    "@biomejs/biome": "2.5.1",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.1",
-    "knip": "^6.15.0"
+    "knip": "^6.20.0"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
@@ -42,12 +42,12 @@
     "build:binary": "bun build ./src/index.ts --compile --outfile dist/refinery"
   },
   "dependencies": {
-    "@clack/prompts": "^1.5.1",
+    "@clack/prompts": "^1.6.0",
     "commander": "^15.0.0",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^5.1.0",
     "picocolors": "^1.1.1",
     "ripthrow": "3.2.4",
-    "smol-toml": "^1.6.1",
+    "smol-toml": "^1.7.0",
     "zod": "^4.4.3"
   }
 }
